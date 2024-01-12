@@ -154,7 +154,7 @@ class ToySGDEnv(AbstractMADACEnv):
 
         # State
         remaining_budget = self.n_steps - self.c_step
-        state = np.array([remaining_budget, self.gradient, self.learning_rate, self.momentum])
+        state = np.array([remaining_budget, self.gradient[0], self.gradient[1], self.learning_rate, self.momentum])
 
         # Reward
         # current function value
@@ -202,7 +202,7 @@ class ToySGDEnv(AbstractMADACEnv):
         # self.n_steps = 0
         self.build_objective_function()
         remaining_budget = self.n_steps - self.c_step
-        return np.array([remaining_budget, self.gradient, self.learning_rate, self.momentum]), {}
+        return np.array([remaining_budget, self.gradient[0], self.gradient[1], self.learning_rate, self.momentum]), {}
 
     def render(self, **kwargs):
         """Render progress."""
