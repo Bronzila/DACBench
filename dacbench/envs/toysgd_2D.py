@@ -5,7 +5,7 @@ import torch
 import pandas as pd
 from numpy.polynomial import Polynomial
 
-from dacbench import AbstractMADACEnv
+from dacbench import AbstractEnv
 
 
 def create_polynomial_instance_set(
@@ -41,7 +41,7 @@ def sample_coefficients(order: int = 2, low: float = -10, high: float = 10):
     return coeffs
 
 
-class ToySGD2DEnv(AbstractMADACEnv):
+class ToySGD2DEnv(AbstractEnv):
     """
     Optimize toy functions with SGD + Momentum.
 
