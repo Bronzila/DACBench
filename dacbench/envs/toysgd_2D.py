@@ -3,43 +3,9 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import torch
 import pandas as pd
-from numpy.polynomial import Polynomial
+from env_utils.function_definitions import Rosenbrock, Rastrigin
 
 from dacbench import AbstractEnv
-
-
-def create_polynomial_instance_set(
-    out_fname: str,
-    n_samples: int = 100,
-    order: int = 2,
-    low: float = -10,
-    high: float = 10,
-):
-    """Make instance set."""
-    instances = []
-    for i in range(n_samples):
-        coeffs = sample_coefficients(order=order, low=low, high=high)
-        instance = {
-            "ID": i,
-            "family": "polynomial",
-            "order": order,
-            "low": low,
-            "high": high,
-            "coefficients": coeffs,
-        }
-        instances.append(instance)
-    df = pd.DataFrame(instances)
-    df.to_csv(out_fname, sep=";", index=False)
-
-
-def sample_coefficients(order: int = 2, low: float = -10, high: float = 10):
-    """Sample function coefficients."""
-    n_coeffs = order + 1
-    coeffs = np.zeros((n_coeffs,))
-    coeffs[0] = np.random.uniform(0, high, size=1)
-    coeffs[1:] = np.random.uniform(low, high, size=n_coeffs - 1)
-    return coeffs
-
 
 class ToySGD2DEnv(AbstractEnv):
     """
@@ -62,53 +28,36 @@ class ToySGD2DEnv(AbstractEnv):
     def __init__(self, config):
         """Init env."""
         super(ToySGD2DEnv, self).__init__(config)
-
-        if config["batch_size"]:
-            self.batch_size = config["batch_size"]
         self.velocity = 0
         self.dimensions = 2
         self.gradient = np.zeros(self.dimensions)
         self.history = []
-        self.n_dim = None  # type: Optional[int]
+        self.problem = None
         self.objective_function = None
-        self.objective_function_deriv = None
         self.x_min = None
         self.f_min = None
         self.x_cur = None
         self.f_cur = None
         self.momentum = 0  # type: Optional[float]
-        self.learning_rate = None  # type: Optional[float]
+        self.learning_rate = 0.01
+        self.lower_bound = config["low"]
+        self.upper_bound = config["high"]
 
     def build_objective_function(self):
         """Make base function."""
-        if self.instance["family"] == "polynomial":
-            order = int(self.instance["order"])
-            if order != 2:
-                raise NotImplementedError(
-                    "Only order 2 is currently implemented for polynomial functions."
-                )
-            self.n_dim = order
-            coeffs_str = self.instance["coefficients"]
-            coeffs_str = coeffs_str.strip("[]")
-            coeffs = [float(item) for item in coeffs_str.split()]
-            self.objective_function = Polynomial(coef=coeffs)
-            self.objective_function_deriv = self.objective_function.deriv(
-                m=1
-            )  # lambda x0: derivative(self.objective_function, x0, dx=1.0, n=1, args=(), order=3)
-            self.x_min = -coeffs[1] / (
-                2 * coeffs[0] + 1e-10
-            )  # add small epsilon to avoid numerical instabilities
-            self.f_min = self.objective_function(self.x_min)
-
-            self.x_cur = self.get_initial_positions()
+        if self.instance["function"] == "Rosenbrock":
+            self.problem = Rosenbrock()
+        elif self.instance["function"] == "Rastrigin":
+            self.problem = Rastrigin()
         else:
             raise NotImplementedError(
-                "No other function families than polynomial are currently supported."
+                "Function not found."
             )
+        self.x_min = self.problem.x_min
+        self.f_min = self.problem.f_min
+        self.objective_function = self.problem.objective_function
 
-    def get_initial_positions(self):
-        """Get number of batch_size initial positions."""
-        return np.random.uniform(-5, 5, size=self.batch_size)
+        self.x_cur = np.random.uniform(self.lower_bound, self.upper_bound)
 
     def step(
         self, action: float
@@ -165,7 +114,8 @@ class ToySGD2DEnv(AbstractEnv):
         self.f_cur.backward()
         self.gradient = self.x_cur.grad.cpu().detach().numpy()
         remaining_budget = self.n_steps - self.c_step
-        state = np.array([remaining_budget, self.gradient, self.learning_rate, self.momentum])
+        
+        state = np.array([remaining_budget, self.learning_rate, self.gradient[0], self.gradient[1], self.momentum])
 
         self.history.append(self.x_cur)
 
@@ -196,17 +146,17 @@ class ToySGD2DEnv(AbstractEnv):
         self.gradient = np.zeros(self.dimensions)
         self.history = []
         self.objective_function = None
-        self.objective_function_deriv = None
         self.x_min = None
         self.f_min = None
         self.x_cur = None
         self.f_cur = None
+        self.problem = None
         self.momentum = 0
-        self.learning_rate = 0
+        self.learning_rate = 0.01
         # self.n_steps = 0
         self.build_objective_function()
         remaining_budget = self.n_steps - self.c_step
-        return np.array([remaining_budget, self.gradient, self.learning_rate, self.momentum]), {}
+        return np.array([remaining_budget, self.learning_rate, self.momentum, self.gradient[0], self.gradient[1]]), {}
 
     def render(self, **kwargs):
         """Render progress."""
