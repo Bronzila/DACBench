@@ -17,11 +17,9 @@ class ToySGD2DEnv(AbstractEnv):
 
     An instance can look as follows:
     ID                                                  0
-    family                                     polynomial
-    order                                               2
-    low                                                -2
-    high                                                2
-    coefficients    [ 1.40501053 -0.59899755  1.43337392]
+    function                                   Rosenbrock
+    low                                                -5
+    high                                                5
 
     """
 
@@ -38,7 +36,7 @@ class ToySGD2DEnv(AbstractEnv):
         self.f_min = None
         self.x_cur = None
         self.f_cur = None
-        self.momentum = 0  # type: Optional[float]
+        self.momentum = 0
         self.learning_rate = 0.01
         self.lower_bound = config["low"]
         self.upper_bound = config["high"]
@@ -67,16 +65,14 @@ class ToySGD2DEnv(AbstractEnv):
 
         Parameters
         ----------
-        action: Tuple[float, Tuple[float, float]]
-            If scalar, action = (log_learning_rate)
-            If tuple, action = (log_learning_rate, log_momentum)
+        action: float
+            log_learning_rate
 
         Returns
         -------
-        Tuple[Dict[str, float], float, bool, Dict]
+        Tuple[np.ndarray, float, bool, Dict]
 
-            - state : Dict[str, float]
-                State with entries "remaining_budget", "gradient", "learning_rate", "momentum"
+            - state : np.ndarray
             - reward : float
             - terminated : bool
             - truncated : bool
@@ -87,13 +83,8 @@ class ToySGD2DEnv(AbstractEnv):
         info = {}
 
         # parse action
-        if np.isscalar(action):
-            log_learning_rate = action
-        elif len(action) == 2:
-            log_learning_rate, log_momentum = action
-            self.momentum = 10**log_momentum
-        else:
-            raise ValueError
+        
+        log_learning_rate = action
         self.learning_rate = 10**log_learning_rate
 
         # SGD + Momentum update
