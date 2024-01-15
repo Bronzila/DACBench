@@ -12,6 +12,7 @@ from dacbench.envs.sigmoid import (
 )
 from dacbench.envs.theory import TheoryEnv
 from dacbench.envs.toysgd import ToySGDEnv
+from dacbench.envs.toysgd_2D import ToySGD2DEnv
 
 __all__ = [
     "LubyEnv",

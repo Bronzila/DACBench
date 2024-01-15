@@ -106,7 +106,7 @@ class ToySGD2DEnv(AbstractEnv):
         self.gradient = self.x_cur.grad.cpu().detach().numpy()
         remaining_budget = self.n_steps - self.c_step
         
-        state = np.array([remaining_budget, self.learning_rate, self.gradient[0], self.gradient[1], self.momentum])
+        state = np.array([remaining_budget, self.learning_rate, self.momentum, self.gradient[0], self.gradient[1]])
 
         self.history.append(self.x_cur)
 
