@@ -22,6 +22,7 @@ __all__ = [
     "ContinuousStateSigmoidEnv",
     "FastDownwardEnv",
     "ToySGDEnv",
+    "ToySGD2DEnv",
     "GeometricEnv",
     "TheoryEnv",
 ]

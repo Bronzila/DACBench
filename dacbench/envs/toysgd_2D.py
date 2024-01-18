@@ -3,7 +3,7 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import torch
 import pandas as pd
-from env_utils.function_definitions import Rosenbrock, Rastrigin
+from dacbench.envs.env_utils.function_definitions import Rosenbrock, Rastrigin
 
 from dacbench import AbstractEnv
 
@@ -28,7 +28,7 @@ class ToySGD2DEnv(AbstractEnv):
         super(ToySGD2DEnv, self).__init__(config)
         self.velocity = 0
         self.dimensions = 2
-        self.gradient = np.zeros(self.dimensions)
+        self.gradient = torch.zeros(self.dimensions)
         self.history = []
         self.problem = None
         self.objective_function = None
@@ -36,7 +36,7 @@ class ToySGD2DEnv(AbstractEnv):
         self.f_min = None
         self.x_cur = None
         self.f_cur = None
-        self.momentum = 0
+        self.momentum = 0.9
         self.learning_rate = 0.01
         self.lower_bound = config["low"]
         self.upper_bound = config["high"]
@@ -55,7 +55,7 @@ class ToySGD2DEnv(AbstractEnv):
         self.f_min = self.problem.f_min
         self.objective_function = self.problem.objective_function
 
-        self.x_cur = np.random.uniform(self.lower_bound, self.upper_bound)
+        self.x_cur = torch.FloatTensor(2).uniform_(self.lower_bound, self.upper_bound)
 
     def step(
         self, action: float
@@ -70,9 +70,9 @@ class ToySGD2DEnv(AbstractEnv):
 
         Returns
         -------
-        Tuple[np.ndarray, float, bool, Dict]
+        Tuple[torch.tensor, float, bool, Dict]
 
-            - state : np.ndarray
+            - state : torch.tensor
             - reward : float
             - terminated : bool
             - truncated : bool
@@ -95,22 +95,23 @@ class ToySGD2DEnv(AbstractEnv):
         
         # Reward
         # current function value
-        x_cur_tensor = torch.from_numpy(self.x_cur)
+        x_cur_tensor = torch.tensor(self.x_cur, requires_grad=True)
         self.f_cur = self.objective_function(x_cur_tensor)
+        # Gradient
+        self.f_cur.backward()
+        self.gradient = x_cur_tensor.grad
         # log regret
-        log_regret = np.log10(np.abs(self.f_min - self.f_cur))
-        reward = -np.mean(log_regret)
+        log_regret = torch.log10(torch.abs(self.f_min - self.f_cur))
+        reward = -log_regret
 
         # State
-        self.f_cur.backward()
-        self.gradient = self.x_cur.grad.cpu().detach().numpy()
         remaining_budget = self.n_steps - self.c_step
         
-        state = np.array([remaining_budget, self.learning_rate, self.momentum, self.gradient[0], self.gradient[1]])
+        state = torch.tensor([remaining_budget, self.learning_rate, self.gradient[0], self.gradient[1]])
 
         self.history.append(self.x_cur)
 
-        return state, reward, False, truncated, info
+        return state, reward.detach(), False, truncated, info
 
     def reset(self, seed=None, options={}):
         """
@@ -125,7 +126,7 @@ class ToySGD2DEnv(AbstractEnv):
 
         Returns
         -------
-        np.array
+        torch.Tensor
             Environment state
         dict
             Meta-info
@@ -134,7 +135,7 @@ class ToySGD2DEnv(AbstractEnv):
         super(ToySGD2DEnv, self).reset_(seed)
 
         self.velocity = 0
-        self.gradient = np.zeros(self.dimensions)
+        self.gradient = torch.zeros(self.dimensions)
         self.history = []
         self.objective_function = None
         self.x_min = None
@@ -142,12 +143,12 @@ class ToySGD2DEnv(AbstractEnv):
         self.x_cur = None
         self.f_cur = None
         self.problem = None
-        self.momentum = 0
+        self.momentum = 0.9
         self.learning_rate = 0.01
         # self.n_steps = 0
         self.build_objective_function()
         remaining_budget = self.n_steps - self.c_step
-        return np.array([remaining_budget, self.learning_rate, self.momentum, self.gradient[0], self.gradient[1]]), {}
+        return torch.tensor([remaining_budget, self.learning_rate, self.gradient[0], self.gradient[1]]), {"start": self.x_cur.tolist()}
 
     def render(self, **kwargs):
         """Render progress."""

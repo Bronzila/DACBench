@@ -37,7 +37,6 @@ DEFAULTS = objdict(
             {
                 "remaining_budget": spaces.Box(low=0, high=np.inf, shape=(1,)),
                 "learning_rate": spaces.Box(low=0, high=1, shape=(1,)),
-                "momentum": spaces.Box(low=0, high=1, shape=(1,)),
                 "gradient_x": spaces.Box(low=-np.inf, high=np.inf, shape=(1,)),
                 "gradient_y": spaces.Box(low=-np.inf, high=np.inf, shape=(1,)),
             }
@@ -47,11 +46,14 @@ DEFAULTS = objdict(
         "seed": 0,
         "instance_set_path": "../instance_sets/toysgd_2D/toysgd_2D_default.csv",
         "benchmark_info": INFO,
+        "low": -5,
+        "high": 5,
+        "function": "Rosenbrock"
     }
 )
 
 
-class ToySGDBenchmark(AbstractBenchmark):
+class ToySGD2DBenchmark(AbstractBenchmark):
     def __init__(self, config_path=None, config=None):
         """
         Initialize SGD Benchmark
@@ -61,7 +63,7 @@ class ToySGDBenchmark(AbstractBenchmark):
         config_path : str
             Path to config file (optional)
         """
-        super(ToySGDBenchmark, self).__init__(config_path, config)
+        super(ToySGD2DBenchmark, self).__init__(config_path, config)
         if not self.config:
             self.config = objdict(DEFAULTS.copy())
 
