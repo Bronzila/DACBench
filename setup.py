@@ -22,5 +22,5 @@ setup(
             "dacbench.envs.fast-downward/*",
         ]
     ),
-    package_data={"instance_sets": ["*.csv"]}
+    package_data={"dacbench.instance_sets": ["*.csv"]}
 )
