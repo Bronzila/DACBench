@@ -40,12 +40,13 @@ class ToySGD2DEnv(AbstractEnv):
         self.learning_rate = 0.01
         self.lower_bound = config["low"]
         self.upper_bound = config["high"]
+        self.function = config["function"]
 
     def build_objective_function(self):
         """Make base function."""
-        if self.instance["function"] == "Rosenbrock":
+        if self.function == "Rosenbrock":
             self.problem = Rosenbrock()
-        elif self.instance["function"] == "Rastrigin":
+        elif self.function == "Rastrigin":
             self.problem = Rastrigin()
         else:
             raise NotImplementedError(
@@ -56,6 +57,9 @@ class ToySGD2DEnv(AbstractEnv):
         self.objective_function = self.problem.objective_function
 
         self.x_cur = torch.FloatTensor(2).uniform_(self.lower_bound, self.upper_bound)
+
+    def clip_gradient(self):
+        self.gradient = torch.clip(self.gradient, self.lower_bound, self.upper_bound)
 
     def step(
         self, action: float
@@ -100,6 +104,7 @@ class ToySGD2DEnv(AbstractEnv):
         # Gradient
         self.f_cur.backward()
         self.gradient = x_cur_tensor.grad
+        self.clip_gradient()
         # log regret
         log_regret = torch.log10(torch.abs(self.f_min - self.f_cur))
         reward = -log_regret
@@ -176,8 +181,7 @@ class ToySGD2DEnv(AbstractEnv):
         )
         ax.legend()
         ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_title("instance: " + str(self.instance["coefficients"]))
+        ax.set_ylabel("y")        
         plt.show()
 
     def close(self):
