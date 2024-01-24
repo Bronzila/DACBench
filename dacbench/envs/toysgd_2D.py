@@ -37,7 +37,8 @@ class ToySGD2DEnv(AbstractEnv):
         self.x_cur = None
         self.f_cur = None
         self.momentum = 0.9
-        self.learning_rate = 0.01
+        self.learning_rate = config["initial_learning_rate"]
+        self.initial_learning_rate = config["initial_learning_rate"]
         self.lower_bound = config["low"]
         self.upper_bound = config["high"]
         self.function = config["function"]
@@ -59,7 +60,7 @@ class ToySGD2DEnv(AbstractEnv):
         self.x_cur = torch.FloatTensor(2).uniform_(self.lower_bound, self.upper_bound)
 
     def clip_gradient(self):
-        self.gradient = torch.clip(self.gradient, self.lower_bound, self.upper_bound)
+        self.gradient = torch.clip(self.gradient, -100, 100)
 
     def step(
         self, action: float
@@ -96,6 +97,9 @@ class ToySGD2DEnv(AbstractEnv):
             self.momentum * self.velocity + self.learning_rate * self.gradient
         )
         self.x_cur -= self.velocity
+
+        # Clip position to optimization bounds
+        self.x_cur = torch.clip(self.x_cur, self.lower_bound, self.upper_bound)
         
         # Reward
         # current function value
@@ -149,8 +153,8 @@ class ToySGD2DEnv(AbstractEnv):
         self.f_cur = None
         self.problem = None
         self.momentum = 0.9
-        self.learning_rate = 0.01
-        # self.n_steps = 0
+        self.learning_rate = self.initial_learning_rate
+        self.n_steps = 0
         self.build_objective_function()
         remaining_budget = self.n_steps - self.c_step
         return torch.tensor([remaining_budget, self.learning_rate, self.gradient[0], self.gradient[1]]), {"start": self.x_cur.tolist()}

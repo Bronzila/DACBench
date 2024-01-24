@@ -48,6 +48,7 @@ DEFAULTS = objdict(
         "benchmark_info": INFO,
         "low": -5,
         "high": 5,
+        "initial_learning_rate": 0.0002,
         "function": "Rosenbrock"
     }
 )
