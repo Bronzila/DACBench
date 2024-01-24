@@ -3,7 +3,7 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import torch
 import pandas as pd
-from dacbench.envs.env_utils.function_definitions import Rosenbrock, Rastrigin
+from dacbench.envs.env_utils.function_definitions import Rosenbrock, Rastrigin, Ackley, Sphere
 
 from dacbench import AbstractEnv
 
@@ -49,6 +49,10 @@ class ToySGD2DEnv(AbstractEnv):
             self.problem = Rosenbrock()
         elif self.function == "Rastrigin":
             self.problem = Rastrigin()
+        elif self.function == "Ackley":
+            self.problem = Ackley()
+        elif self.function == "Sphere":
+            self.problem = Sphere()
         else:
             raise NotImplementedError(
                 "Function not found."
