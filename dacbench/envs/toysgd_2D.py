@@ -36,7 +36,8 @@ class ToySGD2DEnv(AbstractEnv):
         self.f_min = None
         self.x_cur = None
         self.f_cur = None
-        self.momentum = 0.9
+        self.momentum = config["initial_momentum"]
+        self.initial_momentum = config["initial_momentum"]
         self.learning_rate = config["initial_learning_rate"]
         self.initial_learning_rate = config["initial_learning_rate"]
         self.lower_bound = config["low"]
@@ -156,7 +157,7 @@ class ToySGD2DEnv(AbstractEnv):
         self.x_cur = None
         self.f_cur = None
         self.problem = None
-        self.momentum = 0.9
+        self.momentum = self.initial_momentum
         self.learning_rate = self.initial_learning_rate
         self.n_steps = 0
         self.build_objective_function()
