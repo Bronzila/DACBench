@@ -104,6 +104,13 @@ class ToySGD2DEnv(AbstractEnv):
         self.x_cur -= self.velocity
 
         # Clip position to optimization bounds
+        lower_boundary_penalize = self.x_cur - self.lower_bound
+        upper_boundary_penalize = self.upper_bound - self.x_cur
+        boundary_penalizer = torch.cat(
+            (lower_boundary_penalize, upper_boundary_penalize)
+        )
+        boundary_penalizer[boundary_penalizer > 0] = 0
+        boundary_penalizer = boundary_penalizer.norm()
         self.x_cur = torch.clip(self.x_cur, self.lower_bound, self.upper_bound)
         
         # Reward
@@ -116,7 +123,7 @@ class ToySGD2DEnv(AbstractEnv):
         self.clip_gradient()
         # log regret
         log_regret = torch.log10(torch.abs(self.f_min - self.f_cur))
-        reward = -log_regret
+        reward = -log_regret - boundary_penalizer
 
         # State
         remaining_budget = self.n_steps - self.c_step
