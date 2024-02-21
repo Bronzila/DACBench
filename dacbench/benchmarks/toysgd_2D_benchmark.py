@@ -49,7 +49,10 @@ DEFAULTS = objdict(
         "low": -5,
         "high": 5,
         "initial_learning_rate": 0.0002,
-        "function": "Rosenbrock"
+        "function": "Rosenbrock",
+        "state_version": "basic",
+        "reward_version": "regret",
+        "boundary_termination": True
     }
 )
 

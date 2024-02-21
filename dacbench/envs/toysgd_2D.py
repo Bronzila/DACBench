@@ -1,5 +1,5 @@
 from typing import Dict, Optional, Tuple, Union
-
+import math
 import numpy as np
 import torch
 import pandas as pd
@@ -42,6 +42,10 @@ class ToySGD2DEnv(AbstractEnv):
         self.lower_bound = config["low"]
         self.upper_bound = config["high"]
         self.function = config["function"]
+        self.state_version = config["state_version"]
+        self.reward_version = config["reward_version"]
+        self.boundary_termination = config["boundary_termination"]
+        self.lr_history = torch.ones(5) * math.log10(self.initial_learning_rate)
 
     def build_objective_function(self):
         """Make base function."""
@@ -65,6 +69,22 @@ class ToySGD2DEnv(AbstractEnv):
 
     def clip_gradient(self):
         self.gradient = torch.clip(self.gradient, -100, 100)
+
+    def get_state(self):
+        remaining_budget = self.n_steps - self.c_step
+        log_learning_rate = math.log10(self.learning_rate)
+        if self.state_version == "basic":
+            state = [remaining_budget, log_learning_rate, self.gradient[0], self.gradient[1]]
+        elif self.state_version == "extended":
+            # normalize current position
+            x_norm = (self.x_cur - self.lower_bound) / (self.upper_bound - self.lower_bound)
+            state = torch.cat(
+                (torch.tensor([remaining_budget]),
+                self.lr_history,
+                torch.tensor([self.gradient[0], self.gradient[1], x_norm[0], x_norm[1]]))
+            )
+
+        return torch.tensor(state)
 
     def step(
         self, action: float
@@ -96,14 +116,28 @@ class ToySGD2DEnv(AbstractEnv):
         log_learning_rate = action
         self.learning_rate = 10**log_learning_rate
 
+        # Update action history
+        self.lr_history[1:] = self.lr_history[:-1].clone()
+        self.lr_history[0] = log_learning_rate
+
+        # Calculate function value when not changing the learning rate
+        if self.reward_version == "difference":
+            prev_lr = 10 ** self.lr_history[1]
+            velocity_prev_lr = self.momentum * self.velocity + prev_lr * self.gradient
+            x_prev_lr = self.x_cur - velocity_prev_lr
+            f_prev_lr = self.objective_function(x_prev_lr)
+
         # SGD + Momentum update
         self.velocity = (
             self.momentum * self.velocity + self.learning_rate * self.gradient
         )
         self.x_cur -= self.velocity
 
-        # Clip position to optimization bounds
-        self.x_cur = torch.clip(self.x_cur, self.lower_bound, self.upper_bound)
+        # Clip position to optimization bounds if out of bounds
+        is_optimizee_out_of_bounds = False
+        if torch.any(self.x_cur > self.upper_bound) or torch.any(self.x_cur < self.lower_bound):
+            self.x_cur = torch.clip(self.x_cur, self.lower_bound, self.upper_bound)
+            is_optimizee_out_of_bounds = True
         
         # Reward
         # current function value
@@ -113,16 +147,25 @@ class ToySGD2DEnv(AbstractEnv):
         self.f_cur.backward()
         self.gradient = x_cur_tensor.grad
         self.clip_gradient()
-        # log regret
         log_regret = torch.log10(torch.abs(self.f_min - self.f_cur))
-        reward = -log_regret
 
+        if self.reward_version == "regret":
+            reward = -log_regret
+        elif self.reward_version == "difference":
+            log_regret_prev_lr = torch.log10(torch.abs(self.f_min - f_prev_lr))
+            # Difference reward specified as R = R(a_cur) - R(a_no-op)
+            # Since our reward is negative log regret R = -log(regret_cur) - (-log(regret_no-op))
+            reward = log_regret_prev_lr - log_regret
+            
         # State
-        remaining_budget = self.n_steps - self.c_step
-        
-        state = torch.tensor([remaining_budget, self.learning_rate, self.gradient[0], self.gradient[1]])
+        state = self.get_state()
 
         self.history.append(self.x_cur)
+
+        # If optimizee is out of bounds, penalize and terminate run
+        if self.boundary_termination and is_optimizee_out_of_bounds:
+            reward = -5
+            return state, torch.tensor(reward), True, truncated, info
 
         return state, reward.detach(), False, truncated, info
 
@@ -160,8 +203,9 @@ class ToySGD2DEnv(AbstractEnv):
         self.learning_rate = self.initial_learning_rate
         self.n_steps = 0
         self.build_objective_function()
+        self.lr_history = torch.ones(5) * math.log10(self.initial_learning_rate)
         remaining_budget = self.n_steps - self.c_step
-        return torch.tensor([remaining_budget, self.learning_rate, self.gradient[0], self.gradient[1]]), {"start": self.x_cur.tolist()}
+        return self.get_state(), {"start": self.x_cur.tolist()}
 
     def render(self, **kwargs):
         """Render progress."""
