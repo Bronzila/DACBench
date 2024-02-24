@@ -66,8 +66,6 @@ class ToySGD2DEnv(AbstractEnv):
         self.f_min = self.problem.f_min
         self.objective_function = self.problem.objective_function
 
-        self.x_cur = torch.FloatTensor(2).uniform_(self.lower_bound, self.upper_bound)
-
     def clip_gradient(self):
         self.gradient = torch.clip(self.gradient, -100, 100)
 
@@ -197,13 +195,23 @@ class ToySGD2DEnv(AbstractEnv):
         self.objective_function = None
         self.x_min = None
         self.f_min = None
-        self.x_cur = None
-        self.f_cur = None
         self.problem = None
         self.momentum = self.initial_momentum
         self.learning_rate = self.initial_learning_rate
         self.n_steps = 0
         self.build_objective_function()
+        if "starting_point" in options:
+            self.x_cur = options["starting_point"]
+        else:
+            self.x_cur = torch.FloatTensor(2).uniform_(self.lower_bound, self.upper_bound)
+        
+        # calculate f_cur and gradient
+        x_cur_tensor = torch.tensor(self.x_cur, requires_grad=True)
+        self.f_cur = self.objective_function(x_cur_tensor)
+        self.f_cur.backward()
+        self.gradient = x_cur_tensor.grad
+        self.clip_gradient()
+        
         self.lr_history = torch.ones(5) * math.log10(self.initial_learning_rate)
         remaining_budget = self.n_steps - self.c_step
         return self.get_state(), {"start": self.x_cur.tolist()}
