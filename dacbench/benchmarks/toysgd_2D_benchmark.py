@@ -42,7 +42,7 @@ DEFAULTS = objdict(
             }
         ],
         "reward_range": (-np.inf, np.inf),
-        "cutoff": 10,
+        "cutoff": 100,
         "seed": 0,
         "instance_set_path": "../instance_sets/toysgd_2D/toysgd_2D_default.csv",
         "benchmark_info": INFO,

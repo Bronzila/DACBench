@@ -71,16 +71,29 @@ class ToySGD2DEnv(AbstractEnv):
 
     def get_state(self):
         remaining_budget = self.n_steps - self.c_step
-        log_learning_rate = math.log10(self.learning_rate)
+        log_learning_rate = math.log10(self.learning_rate) if self.learning_rate != 0 else math.log10(1e-10)
         if self.state_version == "basic":
             state = [remaining_budget, log_learning_rate, self.gradient[0], self.gradient[1]]
         elif self.state_version == "extended":
-            # normalize current position
-            x_norm = (self.x_cur - self.lower_bound) / (self.upper_bound - self.lower_bound)
+            lr_hist_deltas = self.lr_history - log_learning_rate
+            # Flag indicating whether agent is inside optimization bounds or outside
+            is_outside_bounds = ((self.x_cur <= self.lower_bound) | (self.x_cur >= self.upper_bound)).any()
+
+            # state = torch.cat(
+            #     (torch.tensor([remaining_budget]),
+            #     torch.tensor([log_learning_rate]),
+            #     lr_hist_deltas[1:], # First value is the difference to current learning rate --> always 0
+            #     torch.tensor([self.gradient[0], self.gradient[1], is_outside_bounds.to(torch.int)]))
+            # )
+
+            # EXPERIMENTAL
+            norm_grad = self.gradient / 100
+            norm_budget = remaining_budget / self.n_steps
             state = torch.cat(
-                (torch.tensor([remaining_budget]),
-                self.lr_history,
-                torch.tensor([self.gradient[0], self.gradient[1], x_norm[0], x_norm[1]]))
+                (torch.tensor([norm_budget]),
+                torch.tensor([log_learning_rate]),
+                lr_hist_deltas[1:], # First value is the difference to current learning rate --> always 0
+                torch.tensor([norm_grad[0], norm_grad[1], is_outside_bounds.to(torch.int)]))
             )
 
         return torch.tensor(state)
@@ -140,6 +153,8 @@ class ToySGD2DEnv(AbstractEnv):
         
         # Reward
         # current function value
+        # Here we need to initialize a new tensor, because we used x_cur in an in-place operation above
+        # Moreover this is important to "reset" the gradients tracked by x_cur_tensor
         x_cur_tensor = torch.tensor(self.x_cur, requires_grad=True)
         self.f_cur = self.objective_function(x_cur_tensor)
         # Gradient
@@ -198,7 +213,6 @@ class ToySGD2DEnv(AbstractEnv):
         self.problem = None
         self.momentum = self.initial_momentum
         self.learning_rate = self.initial_learning_rate
-        self.n_steps = 0
         self.build_objective_function()
         if "starting_point" in options:
             self.x_cur = options["starting_point"]
@@ -212,8 +226,7 @@ class ToySGD2DEnv(AbstractEnv):
         self.gradient = x_cur_tensor.grad
         self.clip_gradient()
         
-        self.lr_history = torch.ones(5) * math.log10(self.initial_learning_rate)
-        remaining_budget = self.n_steps - self.c_step
+        self.lr_history = torch.ones(5) * math.log10(self.initial_learning_rate)        
         return self.get_state(), {"start": self.x_cur.tolist()}
 
     def render(self, **kwargs):
