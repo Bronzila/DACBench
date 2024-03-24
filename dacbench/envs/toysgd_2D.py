@@ -213,6 +213,7 @@ class ToySGD2DEnv(AbstractEnv):
         self.problem = None
         self.momentum = self.initial_momentum
         self.learning_rate = self.initial_learning_rate
+        self.n_steps = 0
         self.build_objective_function()
         if "starting_point" in options:
             self.x_cur = options["starting_point"]
