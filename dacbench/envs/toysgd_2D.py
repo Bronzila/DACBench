@@ -47,6 +47,14 @@ class ToySGD2DEnv(AbstractEnv):
         self.reward_version = config["reward_version"]
         self.boundary_termination = config["boundary_termination"]
         self.lr_history = torch.ones(5) * math.log10(self.initial_learning_rate)
+        self.seed(config["seed"])
+    
+    def seed(self, seed, seed_action_space=False):
+        super(ToySGD2DEnv, self).seed(seed, seed_action_space)
+
+        self.rng = torch.Generator()
+        self.rng.manual_seed(seed)
+
 
     def build_objective_function(self):
         """Make base function."""
@@ -204,6 +212,8 @@ class ToySGD2DEnv(AbstractEnv):
         """
         super(ToySGD2DEnv, self).reset_(seed)
 
+        if seed is not None:
+            self.seed(seed)
         self.velocity = 0
         self.gradient = torch.zeros(self.dimensions)
         self.history = []
@@ -213,11 +223,12 @@ class ToySGD2DEnv(AbstractEnv):
         self.problem = None
         self.momentum = self.initial_momentum
         self.learning_rate = self.initial_learning_rate
+        self.n_steps = 0
         self.build_objective_function()
         if "starting_point" in options:
             self.x_cur = options["starting_point"]
         else:
-            self.x_cur = torch.FloatTensor(2).uniform_(self.lower_bound, self.upper_bound)
+            self.x_cur = torch.FloatTensor(2).uniform_(self.lower_bound, self.upper_bound, generator=self.rng)
         
         # calculate f_cur and gradient
         x_cur_tensor = torch.tensor(self.x_cur, requires_grad=True)
