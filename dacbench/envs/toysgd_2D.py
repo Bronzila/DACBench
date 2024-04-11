@@ -26,8 +26,8 @@ class ToySGD2DEnv(AbstractEnv):
     def __init__(self, config):
         """Init env."""
         super(ToySGD2DEnv, self).__init__(config)
-        self.velocity = 0
         self.dimensions = 2
+        self.velocity = torch.zeros(self.dimensions)
         self.gradient = torch.zeros(self.dimensions)
         self.history = []
         self.problem = None
@@ -81,7 +81,7 @@ class ToySGD2DEnv(AbstractEnv):
         remaining_budget = self.n_steps - self.c_step
         log_learning_rate = math.log10(self.learning_rate) if self.learning_rate != 0 else math.log10(1e-10)
         if self.state_version == "basic":
-            state = [remaining_budget, log_learning_rate, self.gradient[0], self.gradient[1]]
+            state = [-self.c_step, log_learning_rate, self.gradient[0], self.gradient[1]]
         elif self.state_version == "extended":
             lr_hist_deltas = self.lr_history - log_learning_rate
             # Flag indicating whether agent is inside optimization bounds or outside
@@ -102,6 +102,58 @@ class ToySGD2DEnv(AbstractEnv):
                 torch.tensor([log_learning_rate]),
                 lr_hist_deltas[1:], # First value is the difference to current learning rate --> always 0
                 torch.tensor([norm_grad[0], norm_grad[1], is_outside_bounds.to(torch.int)]))
+            )
+        elif self.state_version == "lr_hist":
+            lr_hist_deltas = self.lr_history - log_learning_rate
+            norm_budget = remaining_budget / self.n_steps
+            state = torch.cat(
+                (torch.tensor([norm_budget]),
+                torch.tensor([log_learning_rate]),
+                lr_hist_deltas[1:], # First value is the difference to current learning rate --> always 0
+                torch.tensor([self.gradient[0], self.gradient[1]]))
+            )
+        elif self.state_version == "basic_norm":
+            norm_grad = self.gradient / 100
+            norm_budget = remaining_budget / self.n_steps
+            state = torch.cat(
+                (torch.tensor([norm_budget]),
+                torch.tensor([log_learning_rate]),
+                torch.tensor([norm_grad[0], norm_grad[1]]))
+            )
+        elif self.state_version == "extended_velocity":
+            lr_hist_deltas = self.lr_history - log_learning_rate
+            norm_budget = remaining_budget / self.n_steps
+            norm_grad = self.gradient / 100
+            norm_x_cur = 2 * (self.x_cur - self.lower_bound) / (self.upper_bound - self.lower_bound) - 1
+            state = torch.cat(
+                (torch.tensor([norm_budget]),
+                torch.tensor([log_learning_rate]),
+                lr_hist_deltas[1:], # First value is the difference to current learning rate --> always 0
+                torch.tensor([norm_grad[0], norm_grad[1], self.velocity[0], self.velocity[1], norm_x_cur[0], norm_x_cur[1]]))
+            )
+        elif self.state_version == "extended_momentum":
+            lr_hist_deltas = self.lr_history - log_learning_rate
+            norm_budget = remaining_budget / self.n_steps
+            norm_grad = self.gradient / 100
+            momentum_term = self.momentum * self.velocity
+            norm_x_cur = 2 * (self.x_cur - self.lower_bound) / (self.upper_bound - self.lower_bound) - 1
+            state = torch.cat(
+                (torch.tensor([norm_budget]),
+                torch.tensor([log_learning_rate]),
+                lr_hist_deltas[1:], # First value is the difference to current learning rate --> always 0
+                torch.tensor([norm_grad[0], norm_grad[1], momentum_term[0], momentum_term[1], norm_x_cur[0], norm_x_cur[1]]))
+            )
+        elif self.state_version == "extended_all":
+            lr_hist_deltas = self.lr_history - log_learning_rate
+            norm_budget = remaining_budget / self.n_steps
+            norm_grad = self.gradient / 100
+            momentum_term = self.momentum * self.velocity
+            norm_x_cur = 2 * (self.x_cur - self.lower_bound) / (self.upper_bound - self.lower_bound) - 1
+            state = torch.cat(
+                (torch.tensor([norm_budget]),
+                torch.tensor([log_learning_rate]),
+                lr_hist_deltas[1:], # First value is the difference to current learning rate --> always 0
+                torch.tensor([norm_grad[0], norm_grad[1], momentum_term[0], momentum_term[1], self.velocity[0], self.velocity[1], norm_x_cur[0], norm_x_cur[1]]))
             )
 
         return torch.tensor(state)
@@ -214,7 +266,7 @@ class ToySGD2DEnv(AbstractEnv):
 
         if seed is not None:
             self.seed(seed)
-        self.velocity = 0
+        self.velocity = torch.zeros(self.dimensions)
         self.gradient = torch.zeros(self.dimensions)
         self.history = []
         self.objective_function = None
@@ -223,7 +275,7 @@ class ToySGD2DEnv(AbstractEnv):
         self.problem = None
         self.momentum = self.initial_momentum
         self.learning_rate = self.initial_learning_rate
-        self.n_steps = 0
+        # self.n_steps = 0
         self.build_objective_function()
         if "starting_point" in options:
             self.x_cur = options["starting_point"]
