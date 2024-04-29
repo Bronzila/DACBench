@@ -184,7 +184,6 @@ class ToySGD2DEnv(AbstractEnv):
         info = {}
 
         # parse action
-        action = np.clip(action, -10, 0) 
         log_learning_rate = action
         self.learning_rate = 10**log_learning_rate
 
