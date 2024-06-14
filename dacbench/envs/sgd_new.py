@@ -1,3 +1,4 @@
+import math
 import torch
 
 from dacbench import AbstractMADACEnv
@@ -6,7 +7,7 @@ from dacbench.envs.env_utils.utils import random_torchvision_loader
 
 def optimizer_action(optimizer: torch.optim.Optimizer, action: float) -> None:
     for g in optimizer.param_groups:
-        g["lr"] = action[0]
+        g["lr"] = action
     return optimizer
 
 
@@ -87,6 +88,9 @@ class SGDEnv(AbstractMADACEnv):
         self.crash_penalty = config.get("crash_penalty")
         self.loss_function = config.loss_function(**config.loss_function_kwargs)
 
+        self.learning_rate = config.get("initial_learning_rate")
+        self.initial_learning_rate = config.get("initial_learning_rate")
+
         # Get loaders for instance
         self.datasets, loaders = random_torchvision_loader(
             config.get("seed"),
@@ -106,12 +110,11 @@ class SGDEnv(AbstractMADACEnv):
         truncated = super(SGDEnv, self).step_()
         info = {}
 
-        if isinstance(action, float):
-            action = [10**action]
-        else:
-            action[0] = 10**action[0]
+        log_learning_rate = action
+        self.learning_rate = 10 ** log_learning_rate
+        
 
-        self.optimizer = optimizer_action(self.optimizer, action)
+        self.optimizer = optimizer_action(self.optimizer, self.learning_rate)
         self.optimizer.step()
         self.optimizer.zero_grad()
 
@@ -122,8 +125,6 @@ class SGDEnv(AbstractMADACEnv):
             self.device,
         ]
         self.loss = forward_backward(*train_args)
-        print(f"loss: {self.loss}")
-        print(f"params: {torch.nn.utils.parameters_to_vector(self.model.parameters())}")
 
         crashed = (
             not torch.isfinite(self.loss).any()
@@ -133,7 +134,7 @@ class SGDEnv(AbstractMADACEnv):
         )
 
         
-        state = torch.tensor([self.n_steps, self.loss.mean().detach().numpy(), -self.crash_penalty, True])
+        state = torch.tensor([self.n_steps, log_learning_rate, self.loss.mean().detach().numpy(), -self.crash_penalty, True])
 
         if crashed:
             return (
@@ -170,7 +171,7 @@ class SGDEnv(AbstractMADACEnv):
         ):
             self.min_validation_loss = self.validation_loss
 
-        state = torch.tensor([self.n_steps, self.loss.mean().detach().numpy(), validation_loss.mean(), self._done])
+        state = torch.tensor([self.n_steps, log_learning_rate, self.loss.mean().detach().numpy(), validation_loss.mean(), self._done])
 
         if self._done:
             val_args = [
@@ -192,7 +193,7 @@ class SGDEnv(AbstractMADACEnv):
         forward/backward pass, not yet updating the neural network parameters."""
         super(SGDEnv, self).reset_(seed)
 
-        # self.learning_rate = 0
+        self.learning_rate = self.initial_learning_rate 
         self.optimizer_type = torch.optim.AdamW
         self.info = {}
 
@@ -205,7 +206,7 @@ class SGDEnv(AbstractMADACEnv):
         self.validation_loss = None
         self.min_validation_loss = None
 
-        state = torch.tensor([0, self.loss, 0, False])
+        state = torch.tensor([0, math.log10(self.learning_rate), self.loss, 0, False])
         return state, {}
 
     def render(self, mode="human"):
@@ -222,7 +223,3 @@ class SGDEnv(AbstractMADACEnv):
             )
         else:
             raise NotImplementedError
-
-    @property
-    def learning_rate(self):
-        return self.optimizer.param_groups[0]["lr"]

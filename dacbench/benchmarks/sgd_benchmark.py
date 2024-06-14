@@ -64,6 +64,7 @@ SGD_DEFAULTS = objdict(
         "observation_space_args": [
             {
                 "step": spaces.Box(low=0, high=np.inf, shape=(1,)),
+                "learning_rate": spaces.Box(low=0, high=1, shape=(1,)),
                 "loss": spaces.Box(0, np.inf, shape=(1,)),
                 "validationLoss": spaces.Box(low=0, high=np.inf, shape=(1,)),
                 "crashed": spaces.Discrete(1),
@@ -99,6 +100,7 @@ SGD_DEFAULTS = objdict(
         "train_validation_ratio": 0.8,  # If set to None, random value is used
         "seed": 0,
         "crash_penalty": 100.0,
+        "initial_learning_rate": 0.001,
         "multi_agent": False,
         "instance_set_path": "../instance_sets/sgd/sgd_train_100instances.csv",
         "benchmark_info": INFO,
