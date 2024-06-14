@@ -79,7 +79,7 @@ class SGDEnv(AbstractMADACEnv):
         super(SGDEnv, self).__init__(config)
         self.device = config.get("device")
 
-        self.learning_rate = None
+        # self.learning_rate = None
         self.optimizer_type = torch.optim.AdamW
         self.optimizer_params = config.get("optimizer_params")
         self.batch_size = config.get("training_batch_size")
@@ -91,7 +91,7 @@ class SGDEnv(AbstractMADACEnv):
         self.datasets, loaders = random_torchvision_loader(
             config.get("seed"),
             config.get("instance_set_path"),
-            None,  # If set to None, random data set is chosen; else specific set can be set: e.g. "MNIST"
+            config.get("dataset"),  # If set to None, random data set is chosen; else specific set can be set: e.g. "MNIST"
             self.batch_size,
             config.get("fraction_of_dataset"),
             config.get("train_validation_ratio"),
@@ -105,8 +105,11 @@ class SGDEnv(AbstractMADACEnv):
         performs another forward/backward pass (update only in the next step)."""
         truncated = super(SGDEnv, self).step_()
         info = {}
+
         if isinstance(action, float):
-            action = [action]
+            action = [10**action]
+        else:
+            action[0] = 10**action[0]
 
         self.optimizer = optimizer_action(self.optimizer, action)
         self.optimizer.step()
@@ -119,6 +122,8 @@ class SGDEnv(AbstractMADACEnv):
             self.device,
         ]
         self.loss = forward_backward(*train_args)
+        print(f"loss: {self.loss}")
+        print(f"params: {torch.nn.utils.parameters_to_vector(self.model.parameters())}")
 
         crashed = (
             not torch.isfinite(self.loss).any()
@@ -127,17 +132,13 @@ class SGDEnv(AbstractMADACEnv):
             ).any()
         )
 
-        state = {
-            "step": self.n_steps,
-            "loss": self.loss,
-            "validation_loss": -self.crash_penalty,
-            "done": True,
-        }
+        
+        state = torch.tensor([self.n_steps, self.loss.mean().detach().numpy(), -self.crash_penalty, True])
 
         if crashed:
             return (
                 state,
-                -self.crash_penalty,
+                torch.tensor(-self.crash_penalty),
                 False,
                 True,
                 info,
@@ -169,12 +170,7 @@ class SGDEnv(AbstractMADACEnv):
         ):
             self.min_validation_loss = self.validation_loss
 
-        state = {
-            "step": self.n_steps,
-            "loss": self.loss,
-            "validation_loss": validation_loss,
-            "done": self._done,
-        }
+        state = torch.tensor([self.n_steps, self.loss.mean().detach().numpy(), validation_loss.mean(), self._done])
 
         if self._done:
             val_args = [
@@ -189,14 +185,14 @@ class SGDEnv(AbstractMADACEnv):
             reward = -test_losses.sum().item() / len(self.test_loader.dataset)
         else:
             reward = 0.0
-        return state, reward, False, truncated, info
+        return state, torch.tensor(reward), False, truncated, info
 
     def reset(self, seed=None, options={}):
         """Initialize the neural network, data loaders, etc. for given/random next task. Also perform a single
         forward/backward pass, not yet updating the neural network parameters."""
         super(SGDEnv, self).reset_(seed)
 
-        self.learning_rate = 0
+        # self.learning_rate = 0
         self.optimizer_type = torch.optim.AdamW
         self.info = {}
 
@@ -209,12 +205,8 @@ class SGDEnv(AbstractMADACEnv):
         self.validation_loss = None
         self.min_validation_loss = None
 
-        return {
-            "step": 0,
-            "loss": self.loss,
-            "validation_loss": 0,
-            "crashed": False,
-        }, {}
+        state = torch.tensor([0, self.loss, 0, False])
+        return state, {}
 
     def render(self, mode="human"):
         if mode == "human":
@@ -230,3 +222,7 @@ class SGDEnv(AbstractMADACEnv):
             )
         else:
             raise NotImplementedError
+
+    @property
+    def learning_rate(self):
+        return self.optimizer.param_groups[0]["lr"]
