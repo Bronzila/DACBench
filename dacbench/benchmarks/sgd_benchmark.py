@@ -102,6 +102,7 @@ SGD_DEFAULTS = objdict(
         "multi_agent": False,
         "instance_set_path": "../instance_sets/sgd/sgd_train_100instances.csv",
         "benchmark_info": INFO,
+        "dataset": "MNIST", # MNIST, CIFAR10, FashionMNIST
         # "features": [
         #     "predictiveChangeVarDiscountedAverage",
         #     "predictiveChangeVarUncertainty",
