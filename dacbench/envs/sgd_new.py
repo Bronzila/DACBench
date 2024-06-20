@@ -1,4 +1,5 @@
 import math
+import numpy as np
 import torch
 
 from dacbench import AbstractMADACEnv
@@ -91,6 +92,10 @@ class SGDEnv(AbstractMADACEnv):
         self.learning_rate = config.get("initial_learning_rate")
         self.initial_learning_rate = config.get("initial_learning_rate")
 
+        self.loss = np.inf
+        self.test_loss = np.inf
+        self.validation_loss = np.inf
+
         # Get loaders for instance
         self.datasets, loaders = random_torchvision_loader(
             config.get("seed"),
@@ -173,19 +178,20 @@ class SGDEnv(AbstractMADACEnv):
 
         state = torch.tensor([self.n_steps, log_learning_rate, self.loss.mean().detach().numpy(), validation_loss.mean(), self._done])
 
-        if self._done:
-            val_args = [
-                self.model,
-                self.loss_function,
-                self.test_loader,
-                self.batch_size,
-                1.0,
-                self.device,
-            ]
-            test_losses = test(*val_args)
-            reward = -test_losses.sum().item() / len(self.test_loader.dataset)
-        else:
-            reward = 0.0
+        # if self._done:
+        val_args = [
+            self.model,
+            self.loss_function,
+            self.test_loader,
+            self.batch_size,
+            1.0,
+            self.device,
+        ]
+        test_losses = test(*val_args)
+        self.test_loss = test_losses.mean()
+        reward = -test_losses.sum().item() / len(self.test_loader.dataset)
+        # else:
+        #     reward = 0.0
         return state, torch.tensor(reward), False, truncated, info
 
     def reset(self, seed=None, options={}):
@@ -201,10 +207,11 @@ class SGDEnv(AbstractMADACEnv):
         self.optimizer: torch.optim.Optimizer = torch.optim.AdamW(
             **self.optimizer_params, params=self.model.parameters()
         )
-        self.loss = 0
 
-        self.validation_loss = None
-        self.min_validation_loss = None
+        self.loss = np.inf 
+        self.test_loss = np.inf
+        self.validation_loss = np.inf
+        self.min_validation_loss = np.inf
 
         state = torch.tensor([0, math.log10(self.learning_rate), self.loss, 0, False])
         return state, {}
