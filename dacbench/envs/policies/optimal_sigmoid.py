@@ -1,15 +1,19 @@
+"""Optimal policy for sigmoid."""
+from __future__ import annotations
+
 import numpy as np
 
 
 def sig(x, scaling, inflection):
-    """Simple sigmoid function"""
+    """Simple sigmoid function."""
     return 1 / (1 + np.exp(-scaling * (x - inflection)))
 
 
 def get_optimum(env, state):
+    """Get the optimal action."""
     sigmoids = [
         np.abs(sig(env.c_step, slope, shift))
-        for slope, shift in zip(env.shifts, env.slopes)
+        for slope, shift in zip(env.shifts, env.slopes, strict=False)
     ]
     action = []
     for i in range(len(env.action_space.nvec)):

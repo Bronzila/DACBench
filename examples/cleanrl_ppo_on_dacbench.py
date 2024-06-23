@@ -1,20 +1,21 @@
-# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_continuous_actionpy
+"""Cleanrl ppo on dacbench example.
+docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_continuous_actionpy
+"""
+
 import argparse
-import os
 import random
 import time
+from collections.abc import Callable
 from distutils.util import strtobool
-from typing import Callable
+from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
+from dacbench import benchmarks
+from torch import nn, optim
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
-
-from dacbench import benchmarks
 
 
 def evaluate(
@@ -22,11 +23,13 @@ def evaluate(
     make_env: Callable,
     benchmark_name: str,
     eval_episodes: int,
-    Model: torch.nn.Module,
-    device: torch.device = torch.device("cpu"),
+    model: torch.nn.Module,
+    device: torch.device = None,
 ):
+    if device is None:
+        device = torch.device("cpu")
     envs = gym.vector.SyncVectorEnv([make_env(benchmark_name, None)])
-    agent = Model(envs).to(device)
+    agent = model(envs).to(device)
     agent.load_state_dict(torch.load(model_path, map_location=device))
     agent.eval()
 
@@ -51,7 +54,7 @@ def evaluate(
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
+    parser.add_argument("--exp-name", type=str, default=Path.name(__file__).rstrip(".py"),
         help="the name of this experiment")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
@@ -115,13 +118,14 @@ def make_env(benchmark_name, config=None):
         bench = getattr(benchmarks, benchmark_name)(config=config)
         env = bench.get_environment()
         env = gym.wrappers.FlattenObservation(env)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        return env
+        return gym.wrappers.RecordEpisodeStatistics(env)
 
     return thunk
 
 
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+def layer_init(layer, std=None, bias_const=0.0):
+    if std is None:
+        std = np.sqrt(2)
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
@@ -129,6 +133,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 class Agent(nn.Module):
     def __init__(self, envs):
+        """Init the Agent."""
         super().__init__()
         print(envs.observation_space)
         print(envs.observation_space.shape)
@@ -151,9 +156,11 @@ class Agent(nn.Module):
         )
 
     def get_value(self, x):
+        """Get critic value."""
         return self.critic(x)
 
     def get_action_and_value(self, x, action=None):
+        """Get action and critic value."""
         action_mean = self.actor_mean(x)
         action_logstd = self.actor_logstd.expand_as(action_mean)
         action_std = torch.exp(action_logstd)
@@ -182,7 +189,7 @@ if __name__ == "__main__":
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
-    np.random.seed(args.seed)
+    np.random.seed(args.seed)  # noqa: NPY002
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
@@ -202,10 +209,10 @@ if __name__ == "__main__":
 
     # ALGO Logic: Storage setup
     obs = torch.zeros(
-        (args.num_steps, args.num_envs) + envs.single_observation_space.shape
+        (args.num_steps, args.num_envs, *envs.single_observation_space.shape)
     ).to(device)
     actions = torch.zeros(
-        (args.num_steps, args.num_envs) + envs.single_action_space.shape
+        (args.num_steps, args.num_envs, *envs.single_action_space.shape)
     ).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -227,7 +234,7 @@ if __name__ == "__main__":
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 
-        for step in range(0, args.num_steps):
+        for step in range(args.num_steps):
             global_step += 1 * args.num_envs
             obs[step] = next_obs
             dones[step] = next_done
@@ -245,9 +252,10 @@ if __name__ == "__main__":
             )
             done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(
-                done
-            ).to(device)
+            next_obs, next_done = (
+                torch.Tensor(next_obs).to(device),
+                torch.Tensor(done).to(device),
+            )
 
             # Only print when at least 1 env is done
             if "final_info" not in infos:
@@ -288,9 +296,9 @@ if __name__ == "__main__":
             returns = advantages + values
 
         # flatten the batch
-        b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
+        b_obs = obs.reshape((-1, *envs.single_observation_space.shape))
         b_logprobs = logprobs.reshape(-1)
-        b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+        b_actions = actions.reshape((-1, *envs.single_action_space.shape))
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
@@ -298,8 +306,8 @@ if __name__ == "__main__":
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
         clipfracs = []
-        for epoch in range(args.update_epochs):
-            np.random.shuffle(b_inds)
+        for _epoch in range(args.update_epochs):
+            np.random.shuffle(b_inds)  # noqa: NPY002
             for start in range(0, args.batch_size, args.minibatch_size):
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
@@ -354,9 +362,8 @@ if __name__ == "__main__":
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
 
-            if args.target_kl is not None:
-                if approx_kl > args.target_kl:
-                    break
+            if args.target_kl is not None and approx_kl > args.target_kl:
+                break
 
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)

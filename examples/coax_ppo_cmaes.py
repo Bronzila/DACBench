@@ -1,27 +1,38 @@
+"""Coax ppo cmaes example."""
+import coax
+import ConfigSpace as CS  # noqa: N817
+import gymnasium as gym
+import haiku as hk
 import jax
 import jax.numpy as jnp
-import coax
-import haiku as hk
-from numpy import prod
 import optax
-
 from dacbench.benchmarks import CMAESBenchmark
-from dacbench.wrappers import ObservationWrapper
-
+from numpy import prod
 
 # the name of this script
 name = "ppo"
 
-# the Pendulum MDP
+
+class WrapDictAction(gym.Wrapper):
+    def step(self, action):
+        """Wrap step action."""
+        action = {"step_size": action}
+        return self.env.step(action)
+
+
+cfg_space = CS.ConfigurationSpace()
+STEP_SIZE = CS.Float(name="92_step_size", bounds=(0.0, 10.0))
+cfg_space.add_hyperparameter(STEP_SIZE)
 bench = CMAESBenchmark()
+bench.config.config_space = cfg_space
 env = bench.get_environment()
-env = ObservationWrapper(env)
+env = WrapDictAction(env)
 env = coax.wrappers.TrainMonitor(
     env, name=name, tensorboard_dir=f"./data/tensorboard/{name}"
 )
 
 
-def func_pi(S, is_training):
+def func_pi(s, is_training):
     shared = hk.Sequential(
         (
             hk.Linear(8),
@@ -48,10 +59,10 @@ def func_pi(S, is_training):
             hk.Reshape(env.action_space.shape),
         )
     )
-    return {"mu": mu(S), "logvar": logvar(S)}
+    return {"mu": mu(s), "logvar": logvar(s)}
 
 
-def func_v(S, is_training):
+def func_v(s, is_training):
     seq = hk.Sequential(
         (
             hk.Linear(8),
@@ -64,7 +75,7 @@ def func_v(S, is_training):
             jnp.ravel,
         )
     )
-    return seq(S)
+    return seq(s)
 
 
 # define function approximators

@@ -1,17 +1,18 @@
+"""Wrapper that converts observation spaces to spaces.Box."""
+from __future__ import annotations
+
 import numpy as np
 from gymnasium import Wrapper, spaces
 
 
 class ObservationWrapper(Wrapper):
-    """
-    Wrapper covert observations spaces to spaces.Box for convenience.
+    """Wrapper convert observations spaces to spaces.Box for convenience.
 
     Currently only supports Dict -> Box
     """
 
     def __init__(self, env):
-        """
-        Initialize wrapper.
+        """Initialize wrapper.
 
         Parameters
         ----------
@@ -21,7 +22,7 @@ class ObservationWrapper(Wrapper):
             Function to compute optimal policy
 
         """
-        super(ObservationWrapper, self).__init__(env)
+        super().__init__(env)
         obs_sample = self.flatten(self.env.observation_space.sample())
         size = len(obs_sample)
         self.observation_space = spaces.Box(
@@ -29,8 +30,7 @@ class ObservationWrapper(Wrapper):
         )
 
     def __setattr__(self, name, value):
-        """
-        Set attribute in wrapper if available and in env if not.
+        """Set attribute in wrapper if available and in env if not.
 
         Parameters
         ----------
@@ -46,15 +46,14 @@ class ObservationWrapper(Wrapper):
             setattr(self.env, name, value)
 
     def __getattribute__(self, name):
-        """
-        Get attribute value of wrapper if available and of env if not.
+        """Get attribute value of wrapper if available and of env if not.
 
         Parameters
         ----------
         name : str
             Attribute to get
 
-        Returns
+        Returns:
         -------
         value
             Value of given name
@@ -62,19 +61,17 @@ class ObservationWrapper(Wrapper):
         """
         if name in ["observation_space", "step", "env", "flatten", "reset"]:
             return object.__getattribute__(self, name)
-        else:
-            return getattr(self.env, name)
+        return getattr(self.env, name)
 
     def step(self, action):
-        """
-        Execute environment step and record distance.
+        """Execute environment step and record distance.
 
         Parameters
         ----------
         action : int
             action to execute
 
-        Returns
+        Returns:
         -------
         np.array, float, bool, bool, dict
             state, reward, terminated, truncated, metainfo
@@ -85,10 +82,9 @@ class ObservationWrapper(Wrapper):
         return state, reward, terminated, truncated, info
 
     def reset(self):
-        """
-        Execute environment step and record distance.
+        """Execute environment step and record distance.
 
-        Returns
+        Returns:
         -------
         np.array, dict
             state, info
@@ -100,7 +96,7 @@ class ObservationWrapper(Wrapper):
 
     def flatten(self, state_dict):
         """Flatten dict to list."""
-        keys = sorted(list(state_dict.keys()))
+        keys = sorted(state_dict.keys())
         values = []
         for k in keys:
             if isinstance(state_dict[k], np.ndarray):

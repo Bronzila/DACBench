@@ -1,7 +1,10 @@
-import itertools
-import os
+"""CMA ES Benchmark."""
+from __future__ import annotations
 
-import ConfigSpace as CS
+import itertools
+from pathlib import Path
+
+import ConfigSpace as CS  # noqa: N817
 import ConfigSpace.hyperparameters as CSH
 import numpy as np
 from modcma import Parameters
@@ -70,14 +73,10 @@ CMAES_DEFAULTS = objdict(
         "config_space": DEFAULT_CFG_SPACE,
         "action_space_class": "MultiDiscrete",
         "action_space_args": [
-            list(
-                map(
-                    lambda m: len(
-                        getattr(getattr(Parameters, m), "options", [False, True])
-                    ),
-                    Parameters.__modules__,
-                )
-            )
+            [
+                len(getattr(getattr(Parameters, m), "options", [False, True]))
+                for m in Parameters.__modules__
+            ]
         ],
         "observation_space_class": "Box",
         "observation_space_args": [-np.inf * np.ones(5), np.inf * np.ones(5)],
@@ -87,33 +86,40 @@ CMAES_DEFAULTS = objdict(
         "cutoff": 1e6,
         "seed": 0,
         "multi_agent": False,
-        "instance_set_path": os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "../instance_sets/modea/modea_train.csv",
-        ),
-        "test_set_path": os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "../instance_sets/modea/modea_train.csv",
-        ),
+        "instance_set_path": "../instance_sets/modea/modea_train.csv",
+        "test_set_path": "../instance_sets/modea/modea_train.csv",
         "benchmark_info": INFO,
     }
 )
 
 
 class CMAESBenchmark(AbstractBenchmark):
-    def __init__(self, config_path: str = None, config=None):
+    """Benchmark for controlling the step size of CMA-ES on BBOB functions."""
+
+    def __init__(self, config_path: str | None = None, config=None):
+        """Initialize CMA ES Benchmark.
+
+        Parameters
+        -------
+        config_path : str
+            Path to config file (optional)
+        """
         super().__init__(config_path, config)
-        self.config = objdict(CMAES_DEFAULTS.copy(), **(self.config or dict()))
+        self.config = objdict(CMAES_DEFAULTS.copy(), **(self.config or {}))
 
     def get_environment(self):
+        """Return SGDEnv env with current configuration.
+
+        Returns:
+        -------
+        SGDEnv
+            SGD environment
+        """
         if "instance_set" not in self.config:
             self.read_instance_set()
 
         # Read test set if path is specified
-        if (
-            "test_set" not in self.config.keys()
-            and "test_set_path" in self.config.keys()
-        ):
+        if "test_set" not in self.config and "test_set_path" in self.config:
             self.read_instance_set(test=True)
 
         env = CMAESEnv(self.config)
@@ -123,15 +129,16 @@ class CMAESBenchmark(AbstractBenchmark):
         return env
 
     def read_instance_set(self, test=False):
+        """Read path of instances from config into list."""
         if test:
-            path = self.config.test_set_path
+            path = Path(__file__).resolve().parent / self.config.test_set_path
             keyword = "test_set"
         else:
-            path = self.config.instance_set_path
+            path = Path(__file__).resolve().parent / self.config.instance_set_path
             keyword = "instance_set"
 
-        self.config[keyword] = dict()
-        with open(path, "r") as fh:
+        self.config[keyword] = {}
+        with open(path) as fh:
             for line in itertools.islice(fh, 1, None):
                 _id, dim, fid, iid, *representation = line.strip().split(",")
                 self.config[keyword][int(_id)] = [

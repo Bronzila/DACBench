@@ -1,6 +1,7 @@
+"""CMA ES Environment."""
+from __future__ import annotations
+
 import re
-import warnings
-from collections import OrderedDict
 
 import numpy as np
 from IOHexperimenter import IOH_function
@@ -10,46 +11,54 @@ from dacbench import AbstractMADACEnv
 
 
 class CMAESEnv(AbstractMADACEnv):
+    """The CMA ES environment controlles the step size on BBOB functions."""
+
     def __init__(self, config):
+        """Initialize the environment."""
         super().__init__(config)
 
         self.es = None
         self.budget = config.budget
         self.total_budget = self.budget
 
-        param = Parameters(
-            10
-        )  # Dummy dim since current parameters don't rely on dimension
-
-        # Get all defaults from modcma as dictionary
-        self.hyperparam_defaults = dict(
-            map(
-                lambda m: (m, getattr(param, m)),
-                param.__modules__,
-            )
-        )
-
         # Find all set hyperparam_defaults and replace cma defaults
-        if "config_space" in config.keys():
-            for name in config["config_space"].keys():
+        if "config_space" in config:
+            for name in config["config_space"]:
                 value = self.config.get(name)
                 if value:
-                    self.hyperparam_defaults[self.uniform_name(name)] = value
+                    self.representation_dict[self._uniform_name(name)] = value
 
         self.get_reward = config.get("reward_function", self.get_default_reward)
         self.get_state = config.get("state_method", self.get_default_state)
 
-    def uniform_name(self, name):
-        # Convert name of parameters uniformly to lowercase, separated with _ and no numbers
+    def _uniform_name(self, name):
+        # Convert name of parameters uniformly to lowercase,
+        # separated with _ and no numbers
         pattern = r"^\d+_"
 
         # Use re.sub to remove the leading number and underscore
         result = re.sub(pattern, "", name)
         return result.lower()
 
-    def reset(self, seed=None, options={}):
+    def reset(self, seed=None, options=None):
+        """Reset the environment."""
+        if options is None:
+            options = {}
         super().reset_(seed)
         self.dim, self.fid, self.iid, self.representation = self.instance
+        self.representation_dict = {
+            "active": self.representation[0],
+            "elitist": self.representation[1],
+            "orthogonal": self.representation[2],
+            "sequential": self.representation[3],
+            "threshold_convergence": self.representation[4],
+            "step_size_adaptation": self.representation[5],
+            "mirrored": self.representation[6],
+            "base_sampler": self.representation[7],
+            "weights_option": self.representation[8],
+            "local_restart": self.representation[9],
+            "bound_correction": self.representation[10],
+        }
         self.objective = IOH_function(
             self.fid, self.dim, self.iid, target_precision=1e-8
         )
@@ -62,13 +71,14 @@ class CMAESEnv(AbstractMADACEnv):
         return self.get_state(self), {}
 
     def step(self, action):
+        """Make one step of the environment."""
         truncated = super().step_()
 
         # Get all action values and uniform names
         complete_action = {}
-        if type(action) is OrderedDict:
-            for hp in action.keys():
-                n_name = self.uniform_name(hp)
+        if isinstance(action, dict):
+            for hp in action:
+                n_name = self._uniform_name(hp)
                 if n_name == "step_size":
                     # Step size is set separately
                     self.es.parameters.sigma = action[hp][0]
@@ -77,23 +87,14 @@ class CMAESEnv(AbstractMADACEnv):
                     complete_action[n_name] = action[hp]
 
             # Complete the given action with defaults
-            for default in self.hyperparam_defaults.keys():
+            for default in self.representation_dict:
                 if default == "step_size":
                     continue
                 if default not in complete_action:
-                    complete_action[default] = self.hyperparam_defaults[default]
+                    complete_action[default] = self.representation_dict[default]
             complete_action = complete_action.values()
-
         else:
-            if len(action) < len(Parameters.__modules__):
-                warnings.warn(
-                    "Len of action is not equal to number of hyperparams."
-                    + "As no dict is given, no meaningfull correction can be done"
-                )
-                if isinstance(action, np.ndarray):
-                    action = action.astype(int).tolist()
-                action.extend([0] * (len(Parameters.__modules__) - len(action)))
-            complete_action = action
+            raise ValueError("Action must be a Dict")
 
         new_parameters = Parameters.from_config_array(self.dim, complete_action)
         self.es.parameters.update(
@@ -104,14 +105,31 @@ class CMAESEnv(AbstractMADACEnv):
         return self.get_state(self), self.get_reward(self), terminated, truncated, {}
 
     def close(self):
+        """Closes the environment."""
         return True
 
     def get_default_reward(self, *_):
+        """The default reward function.
+
+        Args:
+            _ (_type_): Empty parameter, which can be used when overriding
+
+        Returns:
+            float: The calculated reward
+        """
         return max(
             self.reward_range[0], min(self.reward_range[1], -self.es.parameters.fopt)
         )
 
     def get_default_state(self, *_):
+        """Default state function.
+
+        Args:
+            _ (_type_): Empty parameter, which can be used when overriding
+
+        Returns:
+            dict: The current state
+        """
         return np.array(
             [
                 self.es.parameters.lambda_,
@@ -123,4 +141,5 @@ class CMAESEnv(AbstractMADACEnv):
         )
 
     def render(self, mode="human"):
+        """Render progress."""
         raise NotImplementedError("CMA-ES does not support rendering at this point")

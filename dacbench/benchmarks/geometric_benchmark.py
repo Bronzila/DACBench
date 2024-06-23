@@ -1,22 +1,32 @@
-import csv
-import os
+"""Geometric Benchmark."""
 
-import ConfigSpace as CS
+from __future__ import annotations
+
+import csv
+from pathlib import Path
+
+import ConfigSpace as CS  # noqa: N817
 import ConfigSpace.hyperparameters as CSH
 import numpy as np
 
 from dacbench.abstract_benchmark import AbstractBenchmark, objdict
 from dacbench.envs import GeometricEnv
 
-FILE_PATH = os.path.dirname(__file__)
+FILE_PATH = Path(__file__).resolve().parent
 ACTION_VALUES = (5, 10)
 
 DEFAULT_CFG_SPACE = CS.ConfigurationSpace()
 
 INFO = {
     "identifier": "Geometric",
-    "name": "High Dimensional Geometric Curve Approximation. Curves are geometrical orthogonal.",
-    "reward": "Overall Euclidean Distance between Point on Curve and Action Vector for all Dimensions",
+    "name": (
+        "High Dimensional Geometric Curve Approximation. "
+        "Curves are geometrical orthogonal."
+    ),
+    "reward": (
+        "Overall Euclidean Distance between Point on Curve "
+        "and Action Vector for all Dimensions"
+    ),
     "state_description": [
         "Remaining Budget",
         "Dimensions",
@@ -35,7 +45,8 @@ GEOMETRIC_DEFAULTS = objdict(
         "cutoff": 10,
         "action_values": [],
         "action_value_default": 4,
-        # if action_values_variable True action_value_mapping will be used instead of action_value_default to define action values
+        # if action_values_variable True action_value_mapping will be used instead of
+        # action_value_default to define action values
         # action_value_mapping defines number of action values for differnet functions
         # sigmoid is split in 3 actions, cubic in 7 etc.
         "action_values_variable": False,
@@ -48,14 +59,17 @@ GEOMETRIC_DEFAULTS = objdict(
             "constant": 1,
             "sinus": 9,
         },
-        "action_interval_mapping": {},  # maps actions to equally sized intervalls in interval [-1, 1]
-        "derivative_interval": 3,  # defines how many values are used for derivative calculation
-        "realistic_trajectory": True,  # True: coordiantes are used as trajectory, False: Actions are used as trajectories
-        "instance_set_path": os.path.join(
-            FILE_PATH, "../instance_sets/geometric/geometric_test.csv"
-        ),
-        # correlation table to chain dimensions -> if dim x changes dim y changes as well
-        # either assign numpy array to correlation table or use create_correlation_table()
+        "action_interval_mapping": {},  # maps actions to equally sized intervalls
+        # in interval [-1, 1]
+        "derivative_interval": 3,  # defines how many values are used for
+        # derivative calculation
+        "realistic_trajectory": True,  # True: coordiantes are used as trajectory,
+        # False: Actions are used as trajectories
+        "instance_set_path": Path(FILE_PATH)
+        / "../instance_sets/geometric/geometric_test.csv",
+        # correlation table to chain dimensions-> if dim x changes dim y changes as well
+        # either assign numpy array to correlation
+        # table or use create_correlation_table()
         "correlation_active": False,
         "correlation_table": None,
         "correlation_info": {
@@ -75,20 +89,17 @@ GEOMETRIC_DEFAULTS = objdict(
 
 
 class GeometricBenchmark(AbstractBenchmark):
-    """
-    Benchmark with default configuration & relevant functions for Geometric
-    """
+    """Benchmark with default configuration & relevant functions for Geometric."""
 
     def __init__(self, config_path=None):
-        """
-        Initialize Geometric Benchmark
+        """Initialize Geometric Benchmark.
 
         Parameters
         -------
         config_path : str
             Path to config file (optional)
         """
-        super(GeometricBenchmark, self).__init__(config_path)
+        super().__init__(config_path)
         if not self.config:
             self.config = objdict(GEOMETRIC_DEFAULTS.copy())
 
@@ -100,24 +111,22 @@ class GeometricBenchmark(AbstractBenchmark):
             self.config["observation_space_type"] = np.float32
 
     def get_environment(self):
-        """
-        Return Geometric env with current configuration
+        """Return Geometric env with current configuration.
 
-        Returns
+        Returns:
         -------
         GeometricEnv
             Geometric environment
 
         """
-        if "instance_set" not in self.config.keys():
+        if "instance_set" not in self.config:
             self.read_instance_set()
 
         self.set_action_values()
         self.set_action_description()
 
-        if (
-            self.config.correlation_active
-            and not type(self.config.correlation_table) == np.ndarray
+        if self.config.correlation_active and not isinstance(
+            self.config.correlation_table, np.ndarray
         ):
             self.create_correlation_table()
 
@@ -129,39 +138,37 @@ class GeometricBenchmark(AbstractBenchmark):
         return env
 
     def read_instance_set(self):
-        """
-        Read instance set from file
+        """Read instance set from file
         Creates a nested List for every Intance.
         The List contains all functions with their respective values.
         """
-        path = os.path.join(FILE_PATH, self.config.instance_set_path)
+        path = Path(FILE_PATH) / self.config.instance_set_path
         self.config["instance_set"] = {}
-        with open(path, "r") as fh:
+        with open(path) as fh:
             known_ids = []
             reader = csv.DictReader(fh)
 
             for row in reader:
                 function_list = []
-                id = int(row["ID"])
+                row_id = int(row["ID"])
 
-                if id not in known_ids:
-                    self.config.instance_set[id] = []
-                    known_ids.append(id)
+                if row_id not in known_ids:
+                    self.config.instance_set[row_id] = []
+                    known_ids.append(row_id)
 
                 for index, element in enumerate(row.values()):
                     # if element == "0" and index != 0:
                     #     break
 
                     # read numbers from csv as floats
-                    element = float(element) if index != 1 else element
+                    elem = float(element) if index != 1 else element
 
-                    function_list.append(element)
+                    function_list.append(elem)
 
-                self.config.instance_set[id].append(function_list)
+                self.config.instance_set[row_id].append(function_list)
 
     def get_benchmark(self, dimension=None, seed=0):
-        """
-        [summary]
+        """[summary].
 
         Parameters
         ----------
@@ -170,7 +177,7 @@ class GeometricBenchmark(AbstractBenchmark):
         seed : int, optional
             [description], by default 0
 
-        Returns
+        Returns:
         -------
         [type]
             [description]
@@ -183,28 +190,24 @@ class GeometricBenchmark(AbstractBenchmark):
         ]
 
         self.config.seed = seed
-        if "instance_set" not in self.config.keys():
+        if "instance_set" not in self.config:
             self.read_instance_set()
 
         self.set_action_values()
         self.set_action_description()
 
-        if (
-            self.config.correlation_active
-            and not type(self.config.correlation_table) == np.ndarray
+        if self.config.correlation_active and not isinstance(
+            self.config.correlation_table, np.ndarray
         ):
             self.create_correlation_table()
 
-        env = GeometricEnv(self.config)
-        return env
+        return GeometricEnv(self.config)
 
     def set_action_values(self):
-        """
-        Adapt action values and update dependencies
+        """Adapt action values and update dependencies
         Number of actions can differ between functions if configured in DefaultDict
         Set observation space args.
         """
-
         map_action_number = {}
         if self.config.action_values_variable:
             map_action_number = self.config.action_value_mapping
@@ -252,9 +255,7 @@ class GeometricBenchmark(AbstractBenchmark):
         ]
 
     def set_action_description(self):
-        """
-        Add Information about Derivative and Coordinate to Description.
-        """
+        """Add Information about Derivative and Coordinate to Description."""
         if "Coordinate" in self.config.benchmark_info["state_description"]:
             return
 
@@ -265,28 +266,28 @@ class GeometricBenchmark(AbstractBenchmark):
             self.config.benchmark_info["state_description"].append(f"Coordinate{index}")
 
     def create_correlation_table(self):
-        """
-        Create correlation table from Config infos
-        """
+        """Create correlation table from Config infos."""
+        rng = np.random.default_rng()
         n_dimensions = len(self.config.instance_set[0])
         corr_table = np.zeros((n_dimensions, n_dimensions))
 
         for corr_level, corr_info in self.config.correlation_info.items():
             for dim1, dim2, signum in corr_info:
                 low, high = self.config.correlation_mapping[corr_level]
-                value = np.random.uniform(low, high)
+                value = rng.uniform(low, high)
                 try:
                     corr_table[dim1, dim2] = value if signum == "+" else value * -1
                 except IndexError:
                     print(
-                        "Check your correlation_info dict. Does it have more dimensions than the instance_set?"
+                        "Check your correlation_info dict. Does it have more dimensions"
+                        " than the instance_set?"
                     )
 
         self.config.correlation_table = corr_table
 
 
 if __name__ == "__main__":
-    from dacbench.challenge_benchmarks.reward_quality_challenge.reward_functions import (
+    from dacbench.challenge_benchmarks.reward_quality_challenge.reward_functions import (  # noqa: E501
         quadratic_euclidean_distance_reward_geometric,
     )
 
@@ -300,9 +301,10 @@ if __name__ == "__main__":
     # env.render_dimensions([0, 1, 2, 3, 4, 5, 6], "/home/vonglahn/tmp/MultiDAC")
     env.render_3d_dimensions([1, 3], "/home/eimer/tmp")
 
+    rng = np.random.default_rng()
     while True:
         env.reset()
         done = False
         while not done:
-            state, reward, done, info = env.step(np.random.randint(env.action_space.n))
+            state, reward, done, info = env.step(rng.randint(env.action_space.n))
             print(reward)

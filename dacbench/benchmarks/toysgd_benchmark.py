@@ -1,11 +1,15 @@
-import os
+"""Benchmark for Toysgd."""
+from __future__ import annotations
 
-import ConfigSpace as CS
+from pathlib import Path
+
+import ConfigSpace as CS  # noqa: N817
 import ConfigSpace.hyperparameters as CSH
 import numpy as np
 import pandas as pd
 from gymnasium import spaces
 
+# from dacbench.envs.toysgd import create_noisy_quadratic_instance_set
 from dacbench.abstract_benchmark import AbstractBenchmark, objdict
 from dacbench.envs import ToySGDEnv
 
@@ -47,23 +51,28 @@ DEFAULTS = objdict(
         "seed": 0,
         "multi_agent": False,
         "batch_size": 16,
-        "instance_set_path": "../instance_sets/toysgd/toysgd_default.csv",
+        # Create and use generated instance set
+        # "instance_set_": create_noisy_quadratic_instance_set("noisy_test_set.csv"),
+        # "instance_set_path": "../../noisy_test_set.csv",
+        "instance_set_path": "../instance_sets/toysgd/toysgd_noisy_quadratic.csv",
+        # "instance_set_path": "../instance_sets/toysgd/toysgd_default.csv",
         "benchmark_info": INFO,
     }
 )
 
 
 class ToySGDBenchmark(AbstractBenchmark):
+    """SGD Benchmark with toy functions."""
+
     def __init__(self, config_path=None, config=None):
-        """
-        Initialize SGD Benchmark
+        """Initialize SGD Benchmark.
 
         Parameters
         -------
         config_path : str
             Path to config file (optional)
         """
-        super(ToySGDBenchmark, self).__init__(config_path, config)
+        super().__init__(config_path, config)
         if not self.config:
             self.config = objdict(DEFAULTS.copy())
 
@@ -72,22 +81,18 @@ class ToySGDBenchmark(AbstractBenchmark):
                 self.config[key] = DEFAULTS[key]
 
     def get_environment(self):
-        """
-        Return SGDEnv env with current configuration
+        """Return SGDEnv env with current configuration.
 
-        Returns
+        Returns:
         -------
         SGDEnv
             SGD environment
         """
-        if "instance_set" not in self.config.keys():
+        if "instance_set" not in self.config:
             self.read_instance_set()
 
         # Read test set if path is specified
-        if (
-            "test_set" not in self.config.keys()
-            and "test_set_path" in self.config.keys()
-        ):
+        if "test_set" not in self.config and "test_set_path" in self.config:
             self.read_instance_set(test=True)
 
         env = ToySGDEnv(self.config)
@@ -97,27 +102,17 @@ class ToySGDBenchmark(AbstractBenchmark):
         return env
 
     def read_instance_set(self, test=False):
-        """
-        Read path of instances from config into list
-        """
+        """Read path of instances from config into list."""
         if test:
-            path = (
-                os.path.dirname(os.path.abspath(__file__))
-                + "/"
-                + self.config.test_set_path
-            )
+            path = Path(__file__).resolve().parent / self.config.test_set_path
             keyword = "test_set"
         else:
-            path = (
-                os.path.dirname(os.path.abspath(__file__))
-                + "/"
-                + self.config.instance_set_path
-            )
+            path = Path(__file__).resolve().parent / self.config.instance_set_path
             keyword = "instance_set"
 
         self.config[keyword] = {}
-        with open(path, "r") as fh:
+        with open(path) as fh:
             # reader = csv.DictReader(fh, delimiter=";")
-            df = pd.read_csv(fh, sep=";")
-            for index, instance in df.iterrows():
+            instance_df = pd.read_csv(fh, sep=";")
+            for _index, instance in instance_df.iterrows():
                 self.config[keyword][int(instance["ID"])] = instance

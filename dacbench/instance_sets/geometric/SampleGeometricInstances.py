@@ -1,12 +1,12 @@
-from __future__ import generators
+"""Sample geometric instance sets."""
+from __future__ import annotations
 
-import os
-import random
-from typing import Dict
+from pathlib import Path
 
 import numpy as np
 
-FILE_PATH = os.path.dirname(__file__)
+FILE_PATH = Path(__file__).parent
+rng = np.random.default_rng()
 
 # Configure amount of different layers
 FUNCTION_CONFIG = {
@@ -34,10 +34,9 @@ SAMPLE_SIZE = 100
 
 
 def save_geometric_instances(
-    filename: str, config: Dict = FUNCTION_CONFIG, path: str = ""
+    filename: str, config: dict = FUNCTION_CONFIG, path: str = ""
 ):
-    """
-    First delete old isntance_set.
+    """First delete old isntance_set.
 
     Create new instances based on config.
 
@@ -46,18 +45,16 @@ def save_geometric_instances(
     filename : str
         name of instance set
     config : Dict, optional
-        config that has info about which functions will get selected, by default FUNCTION_CONFIG
+        config that has info about which functions will get selected,
+        by default FUNCTION_CONFIG
     path : std
         path to save to
 
     """
-    if path:
-        csv_path = os.path.join(path, filename)
-    else:
-        csv_path = os.path.join(FILE_PATH, filename)
+    csv_path = Path(path) / filename if path else Path(FILE_PATH) / filename
 
-    if os.path.exists(csv_path):
-        os.remove(csv_path)
+    if Path.exists(csv_path):
+        Path.unlink(csv_path)
 
     with open(csv_path, "a") as fh:
         id_string = "ID,fcn_name"
@@ -75,8 +72,8 @@ def save_geometric_instances(
 
 
 def _create_csv_string(index, func_name: str) -> str:
-    """
-    Create comma separated string with function name and parameter values. Set 0 for irrelevant params.
+    """Create comma separated string with function name and parameter values.
+    Set 0 for irrelevant params.
 
     Parameters
     ----------
@@ -85,7 +82,7 @@ def _create_csv_string(index, func_name: str) -> str:
     func_name : str
         name of function
 
-    Returns
+    Returns:
     -------
     str
         comma separated string
@@ -98,7 +95,7 @@ def _create_csv_string(index, func_name: str) -> str:
 
     if func_name == "sigmoid":
         value_generator = sample_sigmoid_value()
-    elif func_name == "cubic" or func_name == "parabel":
+    elif func_name in ("cubic", "parabel"):
         value_generator = sample_parabel_cubic_value()
 
     for i in range(max_count):
@@ -107,12 +104,10 @@ def _create_csv_string(index, func_name: str) -> str:
                 value = np.round(sample_sinus_value(), 1)
             elif func_name == "sigmoid":
                 value = np.round(next(value_generator), 1)
-            elif func_name == "cubic":
-                value = next(value_generator)
-            elif func_name == "parabel":
+            elif func_name in ("cubic", "parabel"):
                 value = next(value_generator)
             else:
-                value = np.round(np.random.uniform(low=-10.0, high=10.0), 1)
+                value = np.round(rng.uniform(low=-10.0, high=10.0), 1)
 
             csv_string += "," + str(value)
         else:
@@ -124,27 +119,27 @@ def _create_csv_string(index, func_name: str) -> str:
 
 def sample_sinus_value():
     """Get values for sinus."""
-    return np.round(np.random.uniform(low=0.5, high=2.0), 1)
+    return np.round(rng.uniform(low=0.5, high=2.0), 1)
 
 
 def sample_sigmoid_value():
     """Get values for sigmoid."""
-    scale = np.round(np.random.uniform(low=0.1, high=4.0), 1)
+    scale = np.round(rng.uniform(low=0.1, high=4.0), 1)
     yield scale
-    infliction = np.round(np.random.uniform(low=0, high=10), 1)
+    infliction = np.round(rng.uniform(low=0, high=10), 1)
     yield infliction
 
 
 def sample_parabel_cubic_value():
     """Get values for cubic."""
     sig = [-1, 1]
-    yield random.choice(sig)
+    yield rng.choice(sig)
 
     x_int = list(range(3, 8))
-    yield random.choice(x_int)
+    yield rng.choice(x_int)
 
     y_int = [-50, -20, -10, -5, -1, 0, 1, 5, 10, 20, 50]
-    yield random.choice(y_int)
+    yield rng.choice(y_int)
 
 
 if __name__ == "__main__":

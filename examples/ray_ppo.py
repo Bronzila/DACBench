@@ -1,10 +1,11 @@
-import ray
-from ray.tune.registry import register_env
-from ray.rllib.agents import ppo
+"""Ray PPO example."""
+import argparse
 
+import ray
 from dacbench import benchmarks
 from dacbench.wrappers import ObservationWrapper
-import argparse
+from ray.rllib.agents import ppo
+from ray.tune.registry import register_env
 
 
 def make_benchmark(config):

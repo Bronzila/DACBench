@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -5,7 +7,7 @@ from pathlib import Path
 import gymnasium as gym
 import numpy as np
 import pandas as pd
-
+import pytest
 from dacbench.agents import StaticAgent
 from dacbench.benchmarks import CMAESBenchmark, LubyBenchmark
 from dacbench.logger import Logger, load_logs, log2dataframe
@@ -39,11 +41,13 @@ class TestActionTrackingWrapper(unittest.TestCase):
         action_logger.close()
 
         logs = load_logs(action_logger.get_logfile())
-        dataframe = log2dataframe(logs, wide=True)
+        dataframe = log2dataframe(logs)
 
         expected_actions = pd.DataFrame(
             {
-                f"action_{list(action.keys())[0]}": [action[list(action.keys())[0]]]
+                f"action_{next(iter(action.keys()))}": [
+                    action[next(iter(action.keys()))]
+                ]
                 * 10,
                 f"action_{list(action.keys())[1]}": [action[list(action.keys())[1]]]
                 * 10,
@@ -69,7 +73,8 @@ class TestActionTrackingWrapper(unittest.TestCase):
                 * 10,
             }
         )
-
+        print(dataframe.columns)
+        print(expected_actions.columns)
         for column in expected_actions.columns:
             # todo: seems to be an bug here. Every so ofter the last action is missing.
             # Double checked not a logging problem. Could be a seeding issue
@@ -107,7 +112,7 @@ class TestActionTrackingWrapper(unittest.TestCase):
         action_logger.close()
 
         logs = load_logs(action_logger.get_logfile())
-        dataframe = log2dataframe(logs, wide=True)
+        dataframe = log2dataframe(logs)
 
         expected_actions = [action] * 80
 
@@ -119,16 +124,16 @@ class TestActionTrackingWrapper(unittest.TestCase):
         bench = LubyBenchmark()
         env = bench.get_environment()
         wrapped = ActionFrequencyWrapper(env)
-        self.assertTrue(len(wrapped.overall_actions) == 0)
-        self.assertTrue(wrapped.action_interval is None)
+        assert len(wrapped.overall_actions) == 0
+        assert wrapped.action_interval is None
         wrapped.instance = [0]
-        self.assertTrue(wrapped.instance[0] == 0)
+        assert wrapped.instance[0] == 0
 
         wrapped2 = ActionFrequencyWrapper(env, 10)
-        self.assertTrue(len(wrapped2.overall_actions) == 0)
-        self.assertTrue(wrapped2.action_interval == 10)
-        self.assertTrue(len(wrapped2.action_intervals) == 0)
-        self.assertTrue(len(wrapped2.current_actions) == 0)
+        assert len(wrapped2.overall_actions) == 0
+        assert wrapped2.action_interval == 10
+        assert len(wrapped2.action_intervals) == 0
+        assert len(wrapped2.current_actions) == 0
 
     def test_step(self):
         bench = LubyBenchmark()
@@ -136,20 +141,20 @@ class TestActionTrackingWrapper(unittest.TestCase):
         wrapped = ActionFrequencyWrapper(env, 10)
 
         state, info = wrapped.reset()
-        self.assertTrue(issubclass(type(info), dict))
-        self.assertTrue(len(state) > 1)
+        assert issubclass(type(info), dict)
+        assert len(state) > 1
 
         state, reward, terminated, truncated, _ = wrapped.step(1)
-        self.assertTrue(len(state) > 1)
-        self.assertTrue(reward <= 0)
-        self.assertFalse(terminated)
-        self.assertFalse(truncated)
+        assert len(state) > 1
+        assert reward <= 0
+        assert not terminated
+        assert not truncated
 
-        self.assertTrue(len(wrapped.overall_actions) == 1)
-        self.assertTrue(wrapped.overall_actions[0] == 1)
-        self.assertTrue(len(wrapped.current_actions) == 1)
-        self.assertTrue(wrapped.current_actions[0] == 1)
-        self.assertTrue(len(wrapped.action_intervals) == 0)
+        assert len(wrapped.overall_actions) == 1
+        assert wrapped.overall_actions[0] == 1
+        assert len(wrapped.current_actions) == 1
+        assert wrapped.current_actions[0] == 1
+        assert len(wrapped.action_intervals) == 0
 
     def test_get_actions(self):
         bench = LubyBenchmark()
@@ -165,16 +170,16 @@ class TestActionTrackingWrapper(unittest.TestCase):
 
         overall_actions_only = wrapped.get_actions()
         overall_actions, intervals = wrapped2.get_actions()
-        self.assertTrue(np.array_equal(overall_actions, overall_actions_only))
-        self.assertTrue(overall_actions_only == [0, 1, 2, 3, 4])
+        assert np.array_equal(overall_actions, overall_actions_only)
+        assert overall_actions_only == [0, 1, 2, 3, 4]
 
-        self.assertTrue(len(intervals) == 3)
-        self.assertTrue(len(intervals[0]) == 2)
-        self.assertTrue(intervals[0] == [0, 1])
-        self.assertTrue(len(intervals[1]) == 2)
-        self.assertTrue(intervals[1] == [2, 3])
-        self.assertTrue(len(intervals[2]) == 1)
-        self.assertTrue(intervals[2] == [4])
+        assert len(intervals) == 3
+        assert len(intervals[0]) == 2
+        assert intervals[0] == [0, 1]
+        assert len(intervals[1]) == 2
+        assert intervals[1] == [2, 3]
+        assert len(intervals[2]) == 1
+        assert intervals[2] == [4]
 
     def test_rendering(self):
         bench = LubyBenchmark()
@@ -183,7 +188,7 @@ class TestActionTrackingWrapper(unittest.TestCase):
         wrapped.reset()
         wrapped.step(10)
         img = wrapped.render_action_tracking()
-        self.assertTrue(img.shape[-1] == 3)
+        assert img.shape[-1] == 3
 
         class dict_action_env:
             def __init__(self):
@@ -208,7 +213,7 @@ class TestActionTrackingWrapper(unittest.TestCase):
         env = dict_action_env()
         wrapped = ActionFrequencyWrapper(env)
         wrapped.reset()
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             wrapped.render_action_tracking()
 
         class tuple_action_env:
@@ -232,7 +237,7 @@ class TestActionTrackingWrapper(unittest.TestCase):
         env = tuple_action_env()
         wrapped = ActionFrequencyWrapper(env)
         wrapped.reset()
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             wrapped.render_action_tracking()
 
         class multi_discrete_action_env:
@@ -254,7 +259,7 @@ class TestActionTrackingWrapper(unittest.TestCase):
         for _ in range(10):
             wrapped.step([1, 2])
         img = wrapped.render_action_tracking()
-        self.assertTrue(img.shape[-1] == 3)
+        assert img.shape[-1] == 3
 
         class multi_binary_action_env:
             def __init__(self):
@@ -274,7 +279,7 @@ class TestActionTrackingWrapper(unittest.TestCase):
         wrapped.reset()
         wrapped.step([1, 0])
         img = wrapped.render_action_tracking()
-        self.assertTrue(img.shape[-1] == 3)
+        assert img.shape[-1] == 3
 
         class large_action_env:
             def __init__(self):
@@ -294,4 +299,4 @@ class TestActionTrackingWrapper(unittest.TestCase):
         wrapped.reset()
         wrapped.step(0.5 * np.ones(15))
         img = wrapped.render_action_tracking()
-        self.assertTrue(img.shape[-1] == 3)
+        assert img.shape[-1] == 3
