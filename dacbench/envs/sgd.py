@@ -13,10 +13,10 @@ def _optimizer_action(
     optimizer: torch.optim.Optimizer, action: float, use_momentum: bool
 ) -> None:
     for g in optimizer.param_groups:
-        g["lr"] = action[0]
-        if use_momentum:
-            print("Momentum")
-            g["betas"] = (action[1], 0.999)
+        g["lr"] = action
+        # if use_momentum:
+        #     print("Momentum")
+        #     g["betas"] = (action[1], 0.999)
     return optimizer
 
 
@@ -110,7 +110,6 @@ class SGDEnv(AbstractMADACEnv):
         self.epoch_mode = config.get("epoch_mode", True)
         self.device = config.get("device")
 
-        self.learning_rate = None
         self.optimizer_type = torch.optim.AdamW
         self.optimizer_params = config.get("optimizer_params")
         self.batch_size = config.get("training_batch_size")
@@ -127,6 +126,10 @@ class SGDEnv(AbstractMADACEnv):
 
         # Use default state function, if no specific function is given
         self.get_state = config.get("state_method", self.get_default_state)
+
+        self.learning_rate = config.get("initial_learning_rate")
+        self.initial_learning_rate = config.get("initial_learning_rate")
+        self.state_version = config.get("state_version")
 
         # Get loaders for instance
         self.datasets, loaders = random_torchvision_loader(
@@ -146,9 +149,11 @@ class SGDEnv(AbstractMADACEnv):
         """
         truncated = super().step_()
         info = {}
-        if isinstance(action, float):
-            action = [action]
-        self.optimizer = _optimizer_action(self.optimizer, action, self.use_momentum)
+
+        log_learning_rate = action
+        self.learning_rate = 10 ** log_learning_rate
+
+        self.optimizer = _optimizer_action(self.optimizer, self.learning_rate, self.use_momentum)
 
         if self.epoch_mode:
             self.loss, self.average_loss = run_epoch(
@@ -181,7 +186,7 @@ class SGDEnv(AbstractMADACEnv):
             self._done = True
             return (
                 self.get_state(self),
-                self.crash_penalty,
+                torch.tensor(self.crash_penalty),
                 False,
                 True,
                 info,
@@ -259,7 +264,7 @@ class SGDEnv(AbstractMADACEnv):
                 self.config.get("layer_specification"), len(self.datasets[0].classes)
             )
 
-        self.learning_rate = None
+        self.learning_rate = self.initial_learning_rate
         self.optimizer_type = torch.optim.AdamW
         self.info = {}
         self._done = False
@@ -268,11 +273,42 @@ class SGDEnv(AbstractMADACEnv):
         self.optimizer: torch.optim.Optimizer = torch.optim.AdamW(
             **self.optimizer_params, params=self.model.parameters()
         )
-        self.loss = 0
-        self.test_losses = None
 
-        self.validation_loss = 0
-        self.validation_accuracy = 0
+        train_args = [
+            self.model,
+            self.loss_function,
+            self.train_loader,
+            self.batch_size,
+            1.0,
+            self.device,
+        ]
+        losses, train_acc = test(*train_args)
+        self.loss = losses.mean()
+
+        test_args = [
+            self.model,
+            self.loss_function,
+            self.test_loader,
+            self.batch_size,
+            1.0,
+            self.device,
+        ]
+        self.test_losses, test_accuracies = test(*test_args)
+        
+
+        val_args = [
+            self.model,
+            self.loss_function,
+            self.validation_loader,
+            self.batch_size,
+            1.0,
+            self.device,
+        ]
+        validation_loss, validation_accuracy = test(*val_args)
+
+        self.validation_loss = validation_loss.mean().detach().numpy()
+        self.validation_accuracy = validation_accuracy.mean().detach().numpy()
+        
         self.min_validation_loss = None
 
         if self.epoch_mode:
@@ -280,7 +316,7 @@ class SGDEnv(AbstractMADACEnv):
 
         return self.get_state(self), {}
 
-    def get_default_reward(self, _) -> float:
+    def get_default_reward(self, _) -> torch.tensor:
         """The default reward function.
 
         Args:
@@ -293,9 +329,9 @@ class SGDEnv(AbstractMADACEnv):
             reward = self.test_losses.sum().item() / len(self.test_loader.dataset)
         else:
             reward = 0.0
-        return -reward
+        return torch.tensor(-reward)
 
-    def get_default_state(self, _) -> dict:
+    def get_default_state(self, _) -> torch.Tensor:
         """Default state function.
 
         Args:
@@ -304,20 +340,17 @@ class SGDEnv(AbstractMADACEnv):
         Returns:
             dict: The current state
         """
-        state = {
-            "step": self.c_step,
-            "loss": self.loss,
-            "validation_loss": self.validation_loss,
-            "validation_accuracy": self.validation_accuracy,
-            "done": self._done,
-        }
+        state = [
+            self.c_step,
+            self.loss,
+            self.validation_loss,
+            self.validation_accuracy,
+            self._done,
+        ]
         if self.epoch_mode:
-            state["average_loss"] = self.average_loss
+            state.append(self.average_loss)
 
-        if self._done and self.test_losses is not None:
-            state["test_losses"] = self.test_losses
-            state["test_accuracies"] = self.test_accuracies
-        return state
+        return torch.tensor(state)
 
     def render(self, mode="human"):
         """Render progress."""
