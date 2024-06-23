@@ -153,12 +153,9 @@ class SGDEnv(AbstractMADACEnv):
             ).any()
         )
 
-        
-        state = torch.tensor([self.n_steps, log_learning_rate, self.loss.mean().detach().numpy(), -self.crash_penalty, True])
-
         if crashed:
             return (
-                state,
+                self._get_state(crashed),
                 torch.tensor(-self.crash_penalty),
                 False,
                 True,
@@ -183,15 +180,13 @@ class SGDEnv(AbstractMADACEnv):
         ):
             self.min_validation_loss = self.validation_loss
 
-        state = torch.tensor([self.n_steps, log_learning_rate, self.loss.mean().detach().numpy(), validation_loss.mean(), self._done])
-
         # if self._done:
         test_losses = test(**self.test_args)
         self.test_loss = test_losses.mean()
         reward = -test_losses.sum().item() / len(self.test_loader.dataset)
         # else:
         #     reward = 0.0
-        return state, torch.tensor(reward), False, truncated, info
+        return self._get_state(), torch.tensor(reward), False, truncated, info
 
     def reset(self, seed=None, options={}):
         """Initialize the neural network, data loaders, etc. for given/random next task. Also perform a single
