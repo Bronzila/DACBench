@@ -257,7 +257,6 @@ class SGDBenchmark(AbstractBenchmark):
         env : SGDEnv
             SGD environment
         """
-        self.config = objdict(SGD_DEFAULTS.copy())
         if instance_set_path is not None:
             self.config["instance_set_path"] = instance_set_path
         self.config.seed = seed
