@@ -91,10 +91,7 @@ class SGDEnv(AbstractMADACEnv):
 
         self.learning_rate = config.get("initial_learning_rate")
         self.initial_learning_rate = config.get("initial_learning_rate")
-
-        self.loss = np.inf
-        self.test_loss = np.inf
-        self.validation_loss = np.inf
+        self.state_version = config.get("state_version")
 
         # Get loaders for instance
         self.datasets, loaders = random_torchvision_loader(
@@ -106,6 +103,30 @@ class SGDEnv(AbstractMADACEnv):
             config.get("train_validation_ratio"),
         )
         self.train_loader, self.validation_loader, self.test_loader = loaders
+
+        self.test_args = {
+            "model": self.model,
+            "loss_function": self.loss_function,
+            "loader": self.test_loader,
+            "batch_size": self.batch_size,
+            "batch_percentage": 1.0,
+            "device": self.device,
+        }
+        
+        self.val_args = {
+            "model": self.model,
+            "loss_function": self.loss_function,
+            "loader": self.validation_loader,
+            "batch_size": self.batch_size,
+            "device": self.device,
+        }
+
+        self.train_args = {
+            "model": self.model,
+            "loss_function": self.loss_function,
+            "loader": self.train_loader,
+            "device": self.device,
+        }
 
     def step(self, action: float):
         """
@@ -123,13 +144,7 @@ class SGDEnv(AbstractMADACEnv):
         self.optimizer.step()
         self.optimizer.zero_grad()
 
-        train_args = [
-            self.model,
-            self.loss_function,
-            self.train_loader,
-            self.device,
-        ]
-        self.loss = forward_backward(*train_args)
+        self.loss = forward_backward(**self.train_args)
 
         crashed = (
             not torch.isfinite(self.loss).any()
@@ -159,15 +174,7 @@ class SGDEnv(AbstractMADACEnv):
         else:
             batch_percentage = 0.1
 
-        val_args = [
-            self.model,
-            self.loss_function,
-            self.validation_loader,
-            self.batch_size,
-            batch_percentage,
-            self.device,
-        ]
-        validation_loss = test(*val_args)
+        validation_loss = test(**self.val_args, batch_percentage=batch_percentage)
 
         self.validation_loss = validation_loss.mean()
         if (
@@ -179,15 +186,7 @@ class SGDEnv(AbstractMADACEnv):
         state = torch.tensor([self.n_steps, log_learning_rate, self.loss.mean().detach().numpy(), validation_loss.mean(), self._done])
 
         # if self._done:
-        val_args = [
-            self.model,
-            self.loss_function,
-            self.test_loader,
-            self.batch_size,
-            1.0,
-            self.device,
-        ]
-        test_losses = test(*val_args)
+        test_losses = test(**self.test_args)
         self.test_loss = test_losses.mean()
         reward = -test_losses.sum().item() / len(self.test_loader.dataset)
         # else:
@@ -208,13 +207,15 @@ class SGDEnv(AbstractMADACEnv):
             **self.optimizer_params, params=self.model.parameters()
         )
 
-        self.loss = np.inf 
-        self.test_loss = np.inf
-        self.validation_loss = np.inf
-        self.min_validation_loss = np.inf
+        self.loss = test(**self.train_args, batch_size=self.batch_size).mean()
+        self.test_loss = test(**self.test_args).mean()
+        self.validation_loss = test(**self.val_args, batch_percentage=0.1).mean()
+        self.min_validation_loss = self.validation_loss
 
-        state = torch.tensor([0, math.log10(self.learning_rate), self.loss, 0, False])
-        return state, {}
+        self.n_steps = 0
+        self._done = False
+
+        return self._get_state(), {}
 
     def render(self, mode="human"):
         if mode == "human":
@@ -230,3 +231,14 @@ class SGDEnv(AbstractMADACEnv):
             )
         else:
             raise NotImplementedError
+
+    def _get_state(self, crashed: bool = False):
+        if self.state_version == "basic":
+            state = torch.tensor([self.n_steps, math.log10(self.learning_rate), self.loss, self.validation_loss, self._done])
+            if crashed:
+                # set both losses to -crash_penalty
+                state[2:3] = -self.crash_penalty
+        else:
+            raise NotImplementedError(f"SGD Benchmark does not support state version {self.state_version}")
+
+        return state

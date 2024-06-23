@@ -33,7 +33,28 @@ linear_layers = nn.Sequential(
     nn.LogSoftmax(dim=1),
 )
 
-neural_network = nn.Sequential(feature_extractor, linear_layers)  # (n_conv_layers: 5)
+larger_feature_extractor = nn.Sequential(
+    nn.Conv2d(3, 16, kernel_size=3, padding=1),
+    nn.ReLU(),
+    nn.MaxPool2d(2, 2),
+    nn.Conv2d(16, 32, kernel_size=3, padding=1),
+    nn.ReLU(),
+    nn.MaxPool2d(2, 2)
+)
+
+# Linear layers for classification
+larger_linear_layers = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(2420, 128),  # Adjusted in_features based on the feature extractor's output size
+    nn.ReLU(),  # Activation function
+    nn.Linear(128, 10),  # Fully connected layer for 10 classes
+    nn.LogSoftmax(dim=1)  # LogSoftmax for output
+)
+
+
+# Combine feature extractor and linear layers
+neural_network = nn.Sequential(feature_extractor, larger_linear_layers)
+
 
 INFO = {
     "identifier": "LR",
@@ -41,6 +62,7 @@ INFO = {
     "reward": "Negative Log Differential Validation Loss",
     "state_description": [
         "Step",
+        "Current Learning Rate",
         "Loss",
         "Validation Loss",
         "Crashed",
@@ -48,7 +70,6 @@ INFO = {
         # "Predictive Change Variance (Uncertainty)",
         # "Loss Variance (Discounted Average)",
         # "Loss Variance (Uncertainty)",
-        # "Current Learning Rate",
         # "Training Loss",
         # "Alignment",
     ],
