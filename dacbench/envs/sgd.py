@@ -130,6 +130,7 @@ class SGDEnv(AbstractMADACEnv):
         self.learning_rate = config.get("initial_learning_rate")
         self.initial_learning_rate = config.get("initial_learning_rate")
         self.state_version = config.get("state_version")
+        self.seed = config.get("seed")
 
         # Get loaders for instance
         self.datasets, loaders = random_torchvision_loader(
@@ -234,14 +235,14 @@ class SGDEnv(AbstractMADACEnv):
 
         return self.get_state(self), reward, False, truncated, info
 
-    def reset(self, seed=None, options=None):
+    def reset(self, options=None):
         """Initialize the neural network, data loaders, etc. for given/random next task.
         Also perform a single forward/backward pass,
         not yet updating the neural network parameters.
         """
         if options is None:
             options = {}
-        super().reset_(seed)
+        super().reset_(self.seed)
 
         # Use generator
         rng = np.random.RandomState(self.initial_seed)
@@ -350,7 +351,7 @@ class SGDEnv(AbstractMADACEnv):
         if self.epoch_mode:
             state.append(self.average_loss)
 
-        return torch.tensor(state)
+        return torch.tensor(np.array(state))
 
     def render(self, mode="human"):
         """Render progress."""

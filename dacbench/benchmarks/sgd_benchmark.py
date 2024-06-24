@@ -114,7 +114,7 @@ SGD_DEFAULTS = objdict(
         "instance_set_path": "../instance_sets/sgd/sgd_train_100instances.csv",
         "benchmark_info": INFO,
         "dataset": "MNIST", # MNIST, CIFAR10, FashionMNIST
-        "epoch_mode": True,
+        "epoch_mode": False,
     }
 )
 
@@ -187,7 +187,7 @@ class SGDBenchmark(AbstractBenchmark):
                 ]
                 self.config[keyword][int(row["ID"])] = instance
 
-    def get_benchmark(self, instance_set_path=None, seed=0):
+    def get_benchmark(self, instance_set_path=None):
         """Get benchmark from the LTO paper.
 
         Parameters
@@ -202,6 +202,5 @@ class SGDBenchmark(AbstractBenchmark):
         """
         if instance_set_path is not None:
             self.config["instance_set_path"] = instance_set_path
-        self.config.seed = seed
         self.read_instance_set()
         return SGDEnv(self.config)
