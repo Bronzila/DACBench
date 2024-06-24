@@ -223,13 +223,13 @@ def random_architecture(
 class LayerType:
     """Enum for supported torch layers."""
 
-    CONV2D = 1
-    LINEAR = 2
-    FLATTEN = 3
-    POOLING = 4
-    DROPOUT = 5
-    RELU = 6
-    LOGSOFTMAX = 7
+    CONV2D = "CONV2D"
+    RELU = "RELU"
+    POOLING = "POOLING"
+    DROPOUT = "DROPOUT"
+    FLATTEN = "FLATTEN"
+    LINEAR = "LINEAR"
+    LOGSOFTMAX = "LOGSOFTMAX"
 
 
 # Define a mapping from layer type to the corresponding PyTorch module
