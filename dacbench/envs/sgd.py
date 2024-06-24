@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from utils.general import set_seeds
 
 from dacbench import AbstractMADACEnv
 from dacbench.envs.env_utils import sgd_utils
@@ -132,16 +133,14 @@ class SGDEnv(AbstractMADACEnv):
         self.state_version = config.get("state_version")
         self.seed = config.get("seed")
 
-        # Get loaders for instance
-        self.datasets, loaders = random_torchvision_loader(
-            config.get("seed"),
-            config.get("instance_set_path"),
-            self.dataset_name,
-            self.batch_size,
-            config.get("fraction_of_dataset"),
-            config.get("train_validation_ratio"),
-        )
-        self.train_loader, self.validation_loader, self.test_loader = loaders
+        self.instance_set_path = config.get("instance_set_path")
+        self.fraction_of_dataset = config.get("fraction_of_dataset")
+        self.train_validation_ratio = config.get("train_validation_ratio")
+
+
+        self.rng = np.random.RandomState(self.seed)
+
+        
 
     def step(self, action: float):
         """Update the parameters of the neural network using the given learning rate lr,
@@ -244,26 +243,23 @@ class SGDEnv(AbstractMADACEnv):
             options = {}
         super().reset_(seed)
 
-        # Use generator
-        rng = np.random.RandomState(self.initial_seed)
-        if self.use_generator:
-            (
-                self.model,
-                self.optimizer_params,
-                self.batch_size,
-                self.crash_penalty,
-            ) = sgd_utils.random_instance(rng, self.datasets)
-        elif self.torchub_model[0]:
-            self.model = torch.hub.load(
-                self.torchub_model[0],
-                self.torchub_model[1],
-                pretrained=self.torchub_model[2],
-            )
-        else:
-            # Load model from config file
-            self.model = sgd_utils.create_model(
-                self.config.get("layer_specification"), len(self.datasets[0].classes)
-            )
+        run_seed = self.rng.integers(0, 1000000000, 1)
+        set_seeds(run_seed)
+
+        # Get loaders for instance
+        self.datasets, loaders = random_torchvision_loader(
+            run_seed,
+            self.instance_set_path,
+            self.dataset_name,
+            self.batch_size,
+            self.fraction_of_dataset,
+            self.train_validation_ratio,
+        )
+        self.train_loader, self.validation_loader, self.test_loader = loaders
+
+        self.model = sgd_utils.create_model(
+            self.config.get("layer_specification"), len(self.datasets[0].classes)
+        )
 
         self.learning_rate = self.initial_learning_rate
         self.optimizer_type = torch.optim.AdamW
@@ -271,7 +267,7 @@ class SGDEnv(AbstractMADACEnv):
         self._done = False
 
         self.model.to(self.device)
-        self.optimizer: torch.optim.Optimizer = torch.optim.AdamW(
+        self.optimizer: torch.optim.Optimizer = self.optimizer_type(
             **self.optimizer_params, params=self.model.parameters()
         )
 
