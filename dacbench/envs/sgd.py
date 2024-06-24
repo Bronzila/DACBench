@@ -235,14 +235,14 @@ class SGDEnv(AbstractMADACEnv):
 
         return self.get_state(self), reward, False, truncated, info
 
-    def reset(self, options=None):
+    def reset(self, seed=None, options=None):
         """Initialize the neural network, data loaders, etc. for given/random next task.
         Also perform a single forward/backward pass,
         not yet updating the neural network parameters.
         """
         if options is None:
             options = {}
-        super().reset_(self.seed)
+        super().reset_(seed)
 
         # Use generator
         rng = np.random.RandomState(self.initial_seed)
