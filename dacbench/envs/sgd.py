@@ -115,7 +115,7 @@ class SGDEnv(AbstractMADACEnv):
         self.batch_size = config.get("training_batch_size")
         self.model = config.get("model")
         self.crash_penalty = config.get("crash_penalty")
-        self.loss_function = config.loss_function(**config.loss_function_kwargs)
+        self.loss_function = config["loss_function"](**config["loss_function_kwargs"])
         self.dataset_name = config.get("dataset_name")
         self.use_momentum = config.get("use_momentum")
         self.use_generator = config.get("model_from_dataset")

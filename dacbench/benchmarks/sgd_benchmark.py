@@ -165,7 +165,7 @@ class SGDBenchmark(AbstractBenchmark):
             path = Path(__file__).resolve().parent / self.config.test_set_path
             keyword = "test_set"
         else:
-            path = Path(__file__).resolve().parent / self.config.instance_set_path
+            path = Path(__file__).resolve().parent / self.config["instance_set_path"]
             keyword = "instance_set"
         self.config[keyword] = {}
         with open(path) as fh:

@@ -411,7 +411,7 @@ class AbstractMADACEnv(AbstractEnv):
         super().__init__(config)
         self.multi_agent = False
         if "multi_agent" in config:
-            self.multi_agent = config.multi_agent
+            self.multi_agent = config["multi_agent"]
 
         if self.multi_agent:
             space_class = type(self.action_space)
@@ -444,7 +444,7 @@ class AbstractMADACEnv(AbstractEnv):
             # TODO: this should be set to a reasonable default, ideally
             # Else playing with less than the full number of agents will be really hard
             if "default_action" in self.config:
-                self.action = self.config.default_action
+                self.action = self.config["default_action"]
             else:
                 self.action = self.action_space.sample()
 
