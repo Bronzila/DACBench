@@ -1,13 +1,20 @@
 """SGD environment."""
+
 from __future__ import annotations
+import random
 
 import numpy as np
 import torch
-from utils.general import set_seeds
 
 from dacbench import AbstractMADACEnv
 from dacbench.envs.env_utils import sgd_utils
 from dacbench.envs.env_utils.sgd_utils import random_torchvision_loader
+
+
+def set_seeds(seed: int) -> None:
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
 
 
 def _optimizer_action(
@@ -137,10 +144,7 @@ class SGDEnv(AbstractMADACEnv):
         self.fraction_of_dataset = config.get("fraction_of_dataset")
         self.train_validation_ratio = config.get("train_validation_ratio")
 
-
         self.rng = np.random.RandomState(self.seed)
-
-        
 
     def step(self, action: float):
         """Update the parameters of the neural network using the given learning rate lr,
@@ -151,9 +155,11 @@ class SGDEnv(AbstractMADACEnv):
         info = {}
 
         log_learning_rate = action
-        self.learning_rate = 10 ** log_learning_rate
+        self.learning_rate = 10**log_learning_rate
 
-        self.optimizer = _optimizer_action(self.optimizer, self.learning_rate, self.use_momentum)
+        self.optimizer = _optimizer_action(
+            self.optimizer, self.learning_rate, self.use_momentum
+        )
 
         if self.epoch_mode:
             self.loss, self.average_loss = run_epoch(
@@ -243,7 +249,7 @@ class SGDEnv(AbstractMADACEnv):
             options = {}
         super().reset_(seed)
 
-        run_seed = self.rng.integers(0, 1000000000, 1)
+        run_seed = self.rng.randint(0, 1000000000, 1)[0]
         set_seeds(run_seed)
 
         # Get loaders for instance
@@ -291,7 +297,6 @@ class SGDEnv(AbstractMADACEnv):
             self.device,
         ]
         self.test_losses, test_accuracies = test(*test_args)
-        
 
         val_args = [
             self.model,
@@ -305,7 +310,7 @@ class SGDEnv(AbstractMADACEnv):
 
         self.validation_loss = validation_loss.mean().detach().numpy()
         self.validation_accuracy = validation_accuracy.mean().detach().numpy()
-        
+
         self.min_validation_loss = None
 
         if self.epoch_mode:
