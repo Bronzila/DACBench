@@ -1,6 +1,7 @@
 """SGD environment."""
 
 from __future__ import annotations
+import math
 import random
 
 import numpy as np
@@ -15,6 +16,31 @@ def set_seeds(seed: int) -> None:
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+class SGD_Momentum(torch.optim.Optimizer):
+    def __init__(self, params, lr=1e-3, momentum=0, dampening=0, weight_decay=0, nesterov=False):
+        if lr <= 0.0:
+            raise ValueError("Invalid learning rate: {}".format(lr))
+        if momentum < 0.0:
+            raise ValueError("Invalid momentum value: {}".format(momentum))
+        if dampening != 0.0:
+            raise NotImplementedError("Dampening not implemented.")
+        if weight_decay != 0:
+            raise NotImplementedError("Weight decay not implemented.")
+        
+        defaults = dict(lr=lr, momentum=momentum, dampening=dampening, 
+                        weight_decay=weight_decay, nesterov=nesterov)
+        super(SGD_Momentum, self).__init__(params, defaults)
+
+    def step(self,):
+        for group in self.param_groups: 
+            for p in group['params']: 
+                if p not in self.state: 
+                    self.state[p] = dict(mom=torch.zeros_like(p.data)) 
+                mom = self.state[p]['mom'] 
+                mom = self.momentum * mom - group['lr'] * p.grad.data 
+                p.data.add_(mom)
+
 
 
 def _optimizer_action(
@@ -118,7 +144,7 @@ class SGDEnv(AbstractMADACEnv):
         self.epoch_mode = config.get("epoch_mode", True)
         self.device = config.get("device")
 
-        self.optimizer_type = torch.optim.AdamW
+        self.optimizer_type = SGD_Momentum
         self.optimizer_params = config.get("optimizer_params")
         self.batch_size = config.get("training_batch_size")
         self.model = config.get("model")
@@ -342,8 +368,11 @@ class SGDEnv(AbstractMADACEnv):
         Returns:
             dict: The current state
         """
+        log_learning_rate = math.log10(self.learning_rate) if self.learning_rate != 0 else math.log10(1e-10)
+
         state = [
             self.c_step,
+            log_learning_rate,
             self.loss,
             self.validation_loss,
             self.validation_accuracy,
