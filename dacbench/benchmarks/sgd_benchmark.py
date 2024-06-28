@@ -8,6 +8,7 @@ import ConfigSpace as CS  # noqa: N817
 import numpy as np
 from gymnasium import spaces
 from torch import nn
+import torch
 
 from dacbench.abstract_benchmark import AbstractBenchmark, objdict
 from dacbench.envs import SGDEnv
@@ -64,7 +65,7 @@ SGD_DEFAULTS = objdict(
             }
         ],
         "reward_range": [-(10**9), (10**9)],
-        "device": "cpu",
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
         "model_from_dataset": False,  # If true, generates:
         # random model, optimizer_params, batch_size, crash_penalty
         "layer_specification": [
