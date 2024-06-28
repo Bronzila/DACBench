@@ -93,9 +93,9 @@ SGD_DEFAULTS = objdict(
         ],
         "torch_hub_model": (False, False, False),
         "optimizer_params": {
-            "weight_decay": 10.978902603194243,
-            "eps": 1.2346464628039852e-10,
-            "betas": (0.9994264825468422, 0.9866804882743139),
+            # "weight_decay": 10.978902603194243,
+            # "eps": 1.2346464628039852e-10,
+            # "betas": (0.9994264825468422, 0.9866804882743139),
         },
         "cutoff": 1e2,
         "loss_function": __default_loss_function,
