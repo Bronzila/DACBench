@@ -39,6 +39,7 @@ class SGD_Momentum(torch.optim.Optimizer):
             weight_decay=weight_decay,
             nesterov=nesterov,
         )
+        super(SGD_Momentum, self).__init__(params, defaults)
         self.momentum = momentum
         self.state = dict()
         for group in self.param_groups:
@@ -48,7 +49,6 @@ class SGD_Momentum(torch.optim.Optimizer):
                     grad=torch.zeros_like(p.data),
                     weights=torch.zeros_like(p.data)
                 )
-        super(SGD_Momentum, self).__init__(params, defaults)
 
     def step(
         self,
@@ -63,7 +63,7 @@ class SGD_Momentum(torch.optim.Optimizer):
                     )
 
                 self.state[p]["grad"] = p.grad.data
-                self.state[p]["data"] = p.data
+                self.state[p]["weights"] = p.data
                 velocity = self.state[p]["vel"]
                 velocity.mul_(self.momentum)
                 velocity.add_(group["lr"] * p.grad.data)
