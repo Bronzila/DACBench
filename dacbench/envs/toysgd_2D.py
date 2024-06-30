@@ -231,6 +231,9 @@ class ToySGD2DEnv(AbstractEnv):
             # Since our reward is negative log regret R = -log(regret_cur) - (-log(regret_no-op))
             reward = log_regret_prev_lr - log_regret
             
+        # Clip reward to disallow inf values due to log
+        reward = torch.minimum(reward, torch.tensor(20))
+
         # State
         state = self.get_state()
 
