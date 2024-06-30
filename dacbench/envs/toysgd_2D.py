@@ -184,7 +184,6 @@ class ToySGD2DEnv(AbstractEnv):
         info = {}
 
         # parse action
-        
         log_learning_rate = action
         self.learning_rate = 10**log_learning_rate
 
