@@ -169,6 +169,8 @@ class SGDEnv(AbstractMADACEnv):
         self.instance_set_path = config.get("instance_set_path")
         self.fraction_of_dataset = config.get("fraction_of_dataset")
         self.train_validation_ratio = config.get("train_validation_ratio")
+        self.instance_mode = config.get("instance_mode")
+        self.inst_id = 0
 
         self.lr_history = deque(torch.ones(5) * math.log10(self.initial_learning_rate))
         self.predictions = deque(torch.zeros(2))
@@ -299,9 +301,26 @@ class SGDEnv(AbstractMADACEnv):
 
         self.epoch_length = len(self.train_loader)
 
-        self.model = sgd_utils.create_model(
-            self.config.get("layer_specification"), len(self.datasets[0].classes)
-        )
+        if self.instance_mode == "random_instances":
+            (
+                self.model,
+                self.optimizer_params,
+                self.batch_size,
+                self.crash_penalty,
+            ) = sgd_utils.random_instance(self.rng, self.datasets)
+        elif self.instance_mode == "instance_sets":
+            self.model = sgd_utils.create_model(
+                self.config.instance_sets[self.inst_id], len(self.datasets[0].classes)
+            )
+            self.inst_id += 1
+        elif self.instance_mode == "random_seed":
+            self.model = sgd_utils.create_model(
+                self.config.get("layer_specification"), len(self.datasets[0].classes)
+            )
+        else:
+            raise NotImplementedError(
+                f"No implementation for instance version: {self.instance_mode}"
+            )
 
         self.learning_rate = self.initial_learning_rate
         self.optimizer_type = SGD_Momentum
