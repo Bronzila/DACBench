@@ -119,34 +119,36 @@ def sample_optimizer_params(rng, **kwargs):
     """
     modify = rng.rand()
 
-    weight_decay = (
-        np.exp(rng.uniform(low=np.log(1e-6), high=np.log(0.1)))
-        if modify > 0.8 and rng.rand() > 0.5
-        else 1e-2
-    )
+    # weight_decay = (
+    #     np.exp(rng.uniform(low=np.log(1e-6), high=np.log(0.1)))
+    #     if modify > 0.8 and rng.rand() > 0.5
+    #     else 1e-2
+    # )
 
-    eps = (
-        np.exp(rng.uniform(low=np.log(1e-10), high=np.log(1e-6)))
-        if modify > 0.8 and rng.rand() > 0.5
-        else 1e-8
-    )
+    # eps = (
+    #     np.exp(rng.uniform(low=np.log(1e-10), high=np.log(1e-6)))
+    #     if modify > 0.8 and rng.rand() > 0.5
+    #     else 1e-8
+    # )
 
-    beta1 = 1 - (
+    # beta1 = 1 - (
+    #     np.exp(rng.uniform(low=np.log(0.0001), high=np.log(0.2)))
+    #     if modify > 0.8 and rng.rand() > 0.5
+    #     else 0.1
+    # )
+
+    # beta2 = 1 - (
+    #     np.exp(rng.uniform(low=np.log(0.0001), high=np.log(0.2)))
+    #     if modify > 0.8 and rng.rand() > 0.5
+    #     else 0.0001
+    # )
+    momentum = 1 - (
         np.exp(rng.uniform(low=np.log(0.0001), high=np.log(0.2)))
         if modify > 0.8 and rng.rand() > 0.5
         else 0.1
     )
-
-    beta2 = 1 - (
-        np.exp(rng.uniform(low=np.log(0.0001), high=np.log(0.2)))
-        if modify > 0.8 and rng.rand() > 0.5
-        else 0.0001
-    )
-
     return {
-        "weight_decay": weight_decay,
-        "eps": eps,
-        "betas": (beta1, beta2),
+        "momentum": momentum
     }
 
 
