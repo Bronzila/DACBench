@@ -45,9 +45,9 @@ class SGD_Momentum(torch.optim.Optimizer):
         for group in self.param_groups:
             for p in group["params"]:
                 self.state[p] = dict(
-                    vel=torch.zeros_like(p.data), 
+                    vel=torch.zeros_like(p.data),
                     grad=torch.zeros_like(p.data),
-                    weights=torch.zeros_like(p.data)
+                    weights=torch.zeros_like(p.data),
                 )
 
     def step(
@@ -57,9 +57,9 @@ class SGD_Momentum(torch.optim.Optimizer):
             for p in group["params"]:
                 if p not in self.state:
                     self.state[p] = dict(
-                        vel=torch.zeros_like(p.data), 
+                        vel=torch.zeros_like(p.data),
                         grad=torch.zeros_like(p.data),
-                        weights=torch.zeros_like(p.data)
+                        weights=torch.zeros_like(p.data),
                     )
 
                 self.state[p]["grad"] = p.grad.data
@@ -114,7 +114,11 @@ def test(
             i += 1
             if i >= nmb_sets:
                 break
-    return torch.cat(test_losses).cpu(), torch.tensor(test_accuracies).cpu()
+    return (
+        torch.cat(test_losses).cpu().numpy(),
+        torch.tensor(test_accuracies).cpu().numpy(),
+    )
+
 
 class SGDEnv(AbstractMADACEnv):
     """The SGD DAC Environment implements the problem of dynamically configuring
@@ -208,12 +212,12 @@ class SGDEnv(AbstractMADACEnv):
             self.optimizer.step()
 
         crashed = (
-            not torch.isfinite(self.train_loss).any()
+            not np.isfinite(self.train_loss).any()
             or not torch.isfinite(
                 torch.nn.utils.parameters_to_vector(self.model.parameters())
             ).any()
         )
-        self.train_loss = self.train_loss.numpy().item()
+        self.train_loss = self.train_loss.item()
 
         if crashed:
             self._done = True
@@ -244,8 +248,8 @@ class SGDEnv(AbstractMADACEnv):
         ]
         validation_loss, validation_accuracy = test(*val_args)
 
-        self.validation_loss = validation_loss.mean().detach().numpy()
-        self.validation_accuracy = validation_accuracy.mean().detach().numpy()
+        self.validation_loss = validation_loss.mean()
+        self.validation_accuracy = validation_accuracy.mean()
         if (
             self.min_validation_loss is None
             or self.validation_loss <= self.min_validation_loss
@@ -309,6 +313,7 @@ class SGDEnv(AbstractMADACEnv):
             **self.optimizer_params, params=self.model.parameters()
         )
 
+        # Evaluate model initially
         train_args = [
             self.model,
             self.loss_function,
@@ -317,8 +322,9 @@ class SGDEnv(AbstractMADACEnv):
             1.0,
             self.device,
         ]
-        losses, train_acc = test(*train_args)
-        self.train_loss = losses.mean().cpu()
+        losses, train_accuracy = test(*train_args)
+        self.train_loss = losses.mean()
+        self.train_accuracy = train_accuracy.mean()
 
         test_args = [
             self.model,
@@ -340,8 +346,8 @@ class SGDEnv(AbstractMADACEnv):
         ]
         validation_loss, validation_accuracy = test(*val_args)
 
-        self.validation_loss = validation_loss.mean().detach().cpu().numpy()
-        self.validation_accuracy = validation_accuracy.mean().detach().cpu().numpy()
+        self.validation_loss = validation_loss.mean()
+        self.validation_accuracy = validation_accuracy.mean()
 
         self.min_validation_loss = None
 
@@ -448,8 +454,8 @@ class SGDEnv(AbstractMADACEnv):
         self.predictions.pop()
         self.predictions.appendleft(output)
 
-        accuracy = torch.sum(output == target) / len(target)
-        return loss.mean().detach().cpu(), torch.tensor(accuracy).cpu()
+        accuracy = torch.sum(output.argmax(dim=1) == target) / len(target)
+        return loss.mean().detach().cpu().numpy(), torch.tensor(accuracy).cpu().numpy()
 
     def run_epoch(self, model, loss_function, loader, optimizer, device="cpu"):
         """Run a single epoch of training for given `model` with `loss_function`."""
