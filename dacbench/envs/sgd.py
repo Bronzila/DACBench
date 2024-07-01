@@ -400,41 +400,47 @@ class SGDEnv(AbstractMADACEnv):
             dict: The current state
         """
 
-        remaining_budget = torch.tensor(self.c_step - self.n_steps)
+        remaining_budget = torch.tensor([self.c_step - self.n_steps])
         log_learning_rate = (
-            torch.log10(self.learning_rate)
+            np.log10(self.learning_rate)
             if self.learning_rate != 0
             else math.log10(1e-10)
         )
         lr_hist_deltas = self.lr_history - log_learning_rate
-        prediction_variance = self.predictions[0].var()
-        prediction_change_variance = (self.predictions[1] - self.predictions[0]).var()
+        prediction_variance = [self.predictions[0].var()]
+        prediction_change_variance = [(self.predictions[1] - self.predictions[0]).var()]
 
-        optimizer_state = self.optimizer.state_dict()
+        optimizer_state = self.optimizer.state_dict()["state"]
         norm_grad_layer = torch.ones(len(optimizer_state))
         norm_vel_layer = torch.ones(len(optimizer_state))
         norm_data_layer = torch.ones(len(optimizer_state))
-        for i, param in enumerate(optimizer_state.keys()):
-            norm_grad_layer[i] = optimizer_state[param]["grad"].norm(p=2)
-            norm_vel_layer[i] = optimizer_state[param]["vel"].norm(p=2)
-            norm_data_layer[i] = optimizer_state[param]["data"].norm(p=2)
+        for param in optimizer_state.keys():
+            norm_grad_layer[param] = optimizer_state[param]["grad"].norm(p=1)
+            norm_vel_layer[param] = optimizer_state[param]["vel"].norm(p=1)
+            norm_data_layer[param] = optimizer_state[param]["weights"].norm(p=1)
 
+        norm_grad_layer = norm_grad_layer.mean()
+        norm_vel_layer = norm_vel_layer.mean()
+        norm_data_layer = norm_data_layer.mean()
+        # for module in self.model.modules:
 
-        state = torch.cat([
-            remaining_budget,
-            log_learning_rate,
-            lr_hist_deltas[1:], # first one always 0
-            self.train_loss,
-            self.validation_loss,
-            self.train_accuracy,
-            self.validation_accuracy,
-            prediction_variance,
-            prediction_change_variance,
-            norm_grad_layer,
-            norm_vel_layer,
-            norm_data_layer,
-            self._done,
-        ])
+        state = torch.cat(
+            [
+                remaining_budget,
+                torch.tensor([log_learning_rate]),
+                torch.tensor(lr_hist_deltas[1:]),  # first one always 0
+                torch.tensor([self.train_loss]),
+                torch.tensor([self.validation_loss]),
+                torch.tensor([self.train_accuracy.item()]),
+                torch.tensor([self.validation_accuracy]),
+                # prediction_variance,
+                # prediction_change_variance,
+                torch.tensor([norm_grad_layer.item()]),
+                torch.tensor([norm_vel_layer.item()]),
+                torch.tensor([norm_data_layer.item()]),
+                torch.tensor([self._done]),
+            ]
+        )
         if self.epoch_mode:
             state.append(self.average_loss)
 
