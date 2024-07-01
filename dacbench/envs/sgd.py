@@ -13,7 +13,7 @@ from dacbench.envs.env_utils import sgd_utils
 from dacbench.envs.env_utils.sgd_utils import random_torchvision_loader
 
 
-def set_seeds(seed: int) -> None:
+def set_global_seeds(seed: int) -> None:
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
@@ -274,10 +274,13 @@ class SGDEnv(AbstractMADACEnv):
         """
         if options is None:
             options = {}
-        super().reset_(seed)
 
-        run_seed = self.rng.randint(0, 1000000000, 1)[0]
-        set_seeds(run_seed)
+        # Set global seed for data loaders
+        if self.instance_mode == "random_seed":
+            run_seed = self.rng.integers(0, 1000000000)
+        else:
+            run_seed = self.initial_seed
+        set_global_seeds(run_seed)
 
         # Get loaders for instance
         self.datasets, loaders = random_torchvision_loader(
