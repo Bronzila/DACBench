@@ -45,7 +45,7 @@ def random_torchvision_loader(
     **kwargs,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     """Create train, validation, test loaders for `name` dataset."""
-    rng = np.random.RandomState(seed)
+    rng = np.random.default_rng(seed)
 
     if name is None:
         rng.seed(seed)
@@ -80,10 +80,10 @@ def random_torchvision_loader(
     return (train_dataset, test), (train_loader, val_loader, test_loader)
 
 
-def random_instance(rng: np.random.RandomState, datasets):
+def random_instance(rng: np.random.Generator, datasets):
     """Samples a random Instance."""
     default_rng_state = torch.get_rng_state()
-    seed = rng.randint(1, 4294967295, dtype=np.int64)
+    seed = rng.integers(1, 4294967295, dtype=np.int64)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -93,7 +93,7 @@ def random_instance(rng: np.random.RandomState, datasets):
 
 
 def _random_instance(
-    rng: np.random.RandomState,
+    rng: np.random.Generator,
     datasets,
     **kwargs,
 ):
@@ -112,39 +112,39 @@ def _random_instance(
     )
 
 
-def sample_optimizer_params(rng, **kwargs):
+def sample_optimizer_params(rng: np.random.Generator, **kwargs):
     """Samples optimizer parameters according to below rules.
     -With 0.8 probability keep default of all parameters
     -For each hyperparameter, with 0.5 probability sample a new value else keep default.
     """
-    modify = rng.rand()
+    modify = rng.random()
 
     # weight_decay = (
     #     np.exp(rng.uniform(low=np.log(1e-6), high=np.log(0.1)))
-    #     if modify > 0.8 and rng.rand() > 0.5
+    #     if modify > 0.8 and rng.random() > 0.5
     #     else 1e-2
     # )
 
     # eps = (
     #     np.exp(rng.uniform(low=np.log(1e-10), high=np.log(1e-6)))
-    #     if modify > 0.8 and rng.rand() > 0.5
+    #     if modify > 0.8 and rng.random() > 0.5
     #     else 1e-8
     # )
 
     # beta1 = 1 - (
     #     np.exp(rng.uniform(low=np.log(0.0001), high=np.log(0.2)))
-    #     if modify > 0.8 and rng.rand() > 0.5
+    #     if modify > 0.8 and rng.random() > 0.5
     #     else 0.1
     # )
 
     # beta2 = 1 - (
     #     np.exp(rng.uniform(low=np.log(0.0001), high=np.log(0.2)))
-    #     if modify > 0.8 and rng.rand() > 0.5
+    #     if modify > 0.8 and rng.random() > 0.5
     #     else 0.0001
     # )
     momentum = 1 - (
         np.exp(rng.uniform(low=np.log(0.0001), high=np.log(0.2)))
-        if modify > 0.8 and rng.rand() > 0.5
+        if modify > 0.8 and rng.random() > 0.5
         else 0.1
     )
     return {
@@ -153,7 +153,7 @@ def sample_optimizer_params(rng, **kwargs):
 
 
 def random_architecture(
-    rng: np.random.RandomState,
+    rng: np.random.Generator,
     input_shape: tuple[int, int, int],
     n_classes: int,
 ) -> nn.Module:
@@ -162,7 +162,7 @@ def random_architecture(
     """
     modules = [nn.Identity()]
     max_n_conv_layers = 3
-    n_conv_layers = rng.randint(low=0, high=max_n_conv_layers + 1)
+    n_conv_layers = rng.integers(low=0, high=max_n_conv_layers + 1)
     prev_conv = input_shape[0]
     kernel_sizes = [3, 5, 7][: max(0, 3 - n_conv_layers + 1)]
     activation = rng.choice([nn.Identity, nn.ReLU, nn.PReLU, nn.ELU])
@@ -191,7 +191,7 @@ def random_architecture(
     linear_layers = [nn.Flatten()]
     batch_norm_1d = rng.choice([nn.Identity, nn.BatchNorm1d])
     max_n_mlp_layers = 2
-    n_mlp_layers = int(rng.randint(low=0, high=max_n_mlp_layers + 1))
+    n_mlp_layers = int(rng.integers(low=0, high=max_n_mlp_layers + 1))
     prev_l = int(
         torch.prod(
             torch.tensor(feature_extractor(torch.zeros((1, *input_shape))).shape)

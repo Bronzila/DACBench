@@ -159,7 +159,8 @@ class SGDEnv(AbstractMADACEnv):
         self.learning_rate = config.get("initial_learning_rate")
         self.initial_learning_rate = config.get("initial_learning_rate")
         self.state_version = config.get("state_version")
-        self.seed = config.get("seed")
+        self.initial_seed = config.get("seed")
+        self.seed(self.initial_seed)
 
         self.instance_set_path = config.get("instance_set_path")
         self.fraction_of_dataset = config.get("fraction_of_dataset")
@@ -167,8 +168,6 @@ class SGDEnv(AbstractMADACEnv):
 
         self.lr_history = deque(torch.ones(5) * math.log10(self.initial_learning_rate))
         self.predictions = deque(torch.zeros(2))
-
-        self.rng = np.random.RandomState(self.seed)
 
     def step(self, action: float):
         """Update the parameters of the neural network using the given learning rate lr,
@@ -468,3 +467,8 @@ class SGDEnv(AbstractMADACEnv):
         self.predictions.pop()
         self.predictions.appendleft(predictions.mean())
         return last_loss.mean().detach().cpu(), running_loss.cpu() / len(loader)
+
+    def seed(self, seed, seed_action_space=False):
+        super(SGDEnv, self).seed(seed, seed_action_space)
+
+        self.rng = np.random.default_rng(seed)
