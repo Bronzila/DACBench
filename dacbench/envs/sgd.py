@@ -400,7 +400,7 @@ class SGDEnv(AbstractMADACEnv):
             dict: The current state
         """
 
-        remaining_budget = torch.tensor([self.c_step - self.n_steps])
+        remaining_budget = torch.tensor([(self.n_steps - self.c_step) / self.n_steps])
         log_learning_rate = (
             np.log10(self.learning_rate)
             if self.learning_rate != 0
