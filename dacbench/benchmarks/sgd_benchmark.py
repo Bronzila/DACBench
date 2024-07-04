@@ -1,4 +1,5 @@
 """Benchmark for SGD."""
+
 from __future__ import annotations
 
 import csv
@@ -115,8 +116,9 @@ SGD_DEFAULTS = objdict(
         "multi_agent": False,
         "instance_set_path": "../instance_sets/sgd/sgd_train_100instances.csv",
         "benchmark_info": INFO,
-        "dataset": "MNIST", # MNIST, CIFAR10, FashionMNIST
+        "dataset": "MNIST",  # MNIST, CIFAR10, FashionMNIST
         "epoch_mode": False,
+        "instance_mode": "instance_set",
     }
 )
 
@@ -139,6 +141,8 @@ class SGDBenchmark(AbstractBenchmark):
         for key in SGD_DEFAULTS:
             if key not in self.config:
                 self.config[key] = SGD_DEFAULTS[key]
+            elif key == "instance_mode" and self.config[key] == "":
+                self.config[key] = SGD_DEFAULTS[key]
 
     def get_environment(self):
         """Return SGDEnv env with current configuration.
@@ -158,6 +162,8 @@ class SGDBenchmark(AbstractBenchmark):
         env = SGDEnv(self.config)
         for func in self.wrap_funcs:
             env = func(env)
+
+        print(f"Running on device: {self.config.device}")
 
         return env
 

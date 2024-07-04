@@ -170,6 +170,7 @@ class SGDEnv(AbstractMADACEnv):
         self.fraction_of_dataset = config.get("fraction_of_dataset")
         self.train_validation_ratio = config.get("train_validation_ratio")
         self.instance_mode = config.get("instance_mode")
+        self.instance_set = config.get("instance_set")
         self.inst_id = 0
 
         self.lr_history = deque(torch.ones(5) * math.log10(self.initial_learning_rate))
@@ -308,9 +309,9 @@ class SGDEnv(AbstractMADACEnv):
                 self.batch_size,
                 self.crash_penalty,
             ) = sgd_utils.random_instance(self.rng, self.datasets)
-        elif self.instance_mode == "instance_sets":
+        elif self.instance_mode == "instance_set":
             self.model = sgd_utils.create_model(
-                self.config.instance_sets[self.inst_id], len(self.datasets[0].classes)
+                self.instance_set[self.inst_id], len(self.datasets[0].classes)
             )
             self.inst_id += 1
         elif self.instance_mode == "random_seed":
