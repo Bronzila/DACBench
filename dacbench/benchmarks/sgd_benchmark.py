@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+import re
 
 import ConfigSpace as CS  # noqa: N817
 import numpy as np
@@ -186,10 +187,23 @@ class SGDBenchmark(AbstractBenchmark):
                 else:
                     dataset_name = row["dataset"]
                     dataset_size = None
+
+                architecture = []
+                for layer in row["architecture"].split("-"):
+                    match = re.match(r'(\w+)\((.*)\)', layer)
+                    if match:
+                        # Extract the literals and the values inside the brackets
+                        layer_type = match.group(1)
+                        params = match.group(2).split(',')
+                        # Convert the values to integers if necessary
+                        layer_params = [int(p.strip()) for p in params]
+                        architecture.append((layer_type, layer_params))
+                    else:
+                        architecture.append((layer, []))
                 instance = [
                     dataset_name,
                     int(row["seed"]),
-                    row["architecture"],
+                    architecture,
                     int(row["steps"]),
                     dataset_size,
                 ]

@@ -281,10 +281,14 @@ class SGDEnv(AbstractMADACEnv):
         """
         if options is None:
             options = {}
+        instance = None
 
         # Set global seed for data loaders
         if self.instance_mode == "random_seed":
             run_seed = self.rng.integers(0, 1000000000)
+        elif self.instance_mode == "instance_set":
+            instance = self.instance_set[self.inst_id]
+            run_seed = instance[1]
         else:
             run_seed = self.initial_seed
         set_global_seeds(run_seed)
@@ -293,7 +297,7 @@ class SGDEnv(AbstractMADACEnv):
         self.datasets, loaders = random_torchvision_loader(
             run_seed,
             self.instance_set_path,
-            self.dataset_name,
+            self.dataset_name if instance is None else instance[0],
             self.batch_size,
             self.fraction_of_dataset,
             self.train_validation_ratio,
@@ -311,7 +315,7 @@ class SGDEnv(AbstractMADACEnv):
             ) = sgd_utils.random_instance(self.rng, self.datasets)
         elif self.instance_mode == "instance_set":
             self.model = sgd_utils.create_model(
-                self.instance_set[self.inst_id], len(self.datasets[0].classes)
+                instance[2], len(self.datasets[0].classes)
             )
             self.inst_id += 1
         elif self.instance_mode == "random_seed":

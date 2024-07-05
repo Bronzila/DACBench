@@ -227,7 +227,7 @@ class LayerType:
 
     CONV2D = "CONV2D"
     RELU = "RELU"
-    POOLING = "POOLING"
+    POOLING = "MAXPOOL2D"
     DROPOUT = "DROPOUT"
     FLATTEN = "FLATTEN"
     LINEAR = "LINEAR"
@@ -255,7 +255,7 @@ def create_model(layer_specification, n_classes) -> nn.Sequential:
     """
     layers = []
     for layer_type, layer_params in layer_specification:
-        layer_class = layer_mapping[layer_type]
-        layer = layer_class(**layer_params)
+        layer_class = layer_mapping[layer_type.upper()]
+        layer = layer_class(*layer_params)
         layers.append(layer)
     return nn.Sequential(*layers)
