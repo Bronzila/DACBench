@@ -236,7 +236,7 @@ class SGDEnv(AbstractMADACEnv):
         self._done = truncated
 
         if (
-            self.n_steps % len(self.train_loader) == 0 or self._done
+            self.c_step % len(self.train_loader) == 0 or self._done
         ):  # Calculate validation loss at the end of an epoch
             batch_percentage = 1.0
         else:
@@ -413,21 +413,25 @@ class SGDEnv(AbstractMADACEnv):
             else math.log10(1e-10)
         )
         lr_hist_deltas = self.lr_history - log_learning_rate
-        prediction_variance = [self.predictions[0].var()]
-        prediction_change_variance = [(self.predictions[1] - self.predictions[0]).var()]
 
         optimizer_state = self.optimizer.state_dict()["state"]
         norm_grad_layer = torch.ones(len(optimizer_state))
         norm_vel_layer = torch.ones(len(optimizer_state))
         norm_data_layer = torch.ones(len(optimizer_state))
+        all_weights = []
         for param in optimizer_state.keys():
-            norm_grad_layer[param] = optimizer_state[param]["grad"].norm(p=1)
-            norm_vel_layer[param] = optimizer_state[param]["vel"].norm(p=1)
-            norm_data_layer[param] = optimizer_state[param]["weights"].norm(p=1)
+            norm_grad_layer[param] = optimizer_state[param]["grad"].norm(p=2)
+            norm_vel_layer[param] = optimizer_state[param]["vel"].norm(p=2)
+            norm_data_layer[param] = optimizer_state[param]["weights"].norm(p=2)
+            all_weights.append(optimizer_state[param]["weights"].flatten())
 
         norm_grad_layer = norm_grad_layer.mean()
         norm_vel_layer = norm_vel_layer.mean()
         norm_data_layer = norm_data_layer.mean()
+        all_weights = torch.concat(all_weights)
+        mean_weight = all_weights.mean()
+        std_weight = all_weights.std()
+        loss_ratio = np.log(self.validation_loss / self.train_loss)
         # for module in self.model.modules:
 
         state = torch.cat(
@@ -437,14 +441,14 @@ class SGDEnv(AbstractMADACEnv):
                 torch.tensor(lr_hist_deltas[1:]),  # first one always 0
                 torch.tensor([self.train_loss]),
                 torch.tensor([self.validation_loss]),
+                torch.tensor([loss_ratio]),
                 torch.tensor([self.train_accuracy.item()]),
                 torch.tensor([self.validation_accuracy]),
-                # prediction_variance,
-                # prediction_change_variance,
                 torch.tensor([norm_grad_layer.item()]),
                 torch.tensor([norm_vel_layer.item()]),
                 torch.tensor([norm_data_layer.item()]),
-                torch.tensor([self._done]),
+                torch.tensor([mean_weight.item()]),
+                torch.tensor([std_weight.item()]),
             ]
         )
         if self.epoch_mode:
