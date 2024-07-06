@@ -47,7 +47,7 @@ class SGD_Momentum(torch.optim.Optimizer):
                 self.state[p] = dict(
                     vel=torch.zeros_like(p.data),
                     grad=torch.zeros_like(p.data),
-                    weights=torch.zeros_like(p.data),
+                    weights=p.data,
                 )
 
     def step(
@@ -55,20 +55,21 @@ class SGD_Momentum(torch.optim.Optimizer):
     ):
         for group in self.param_groups:
             for p in group["params"]:
-                if p not in self.state:
-                    self.state[p] = dict(
-                        vel=torch.zeros_like(p.data),
-                        grad=torch.zeros_like(p.data),
-                        weights=torch.zeros_like(p.data),
-                    )
+                if p.grad is not None:
+                    if p not in self.state:
+                        self.state[p] = dict(
+                            vel=torch.zeros_like(p.data),
+                            grad=torch.zeros_like(p.data),
+                            weights=torch.zeros_like(p.data),
+                        )
 
-                self.state[p]["grad"] = p.grad.data
-                self.state[p]["weights"] = p.data
-                velocity = self.state[p]["vel"]
-                velocity.mul_(self.momentum)
-                velocity.add_(group["lr"] * p.grad.data)
+                    self.state[p]["grad"] = p.grad.data
+                    self.state[p]["weights"] = p.data
+                    velocity = self.state[p]["vel"]
+                    velocity.mul_(self.momentum)
+                    velocity.add_(group["lr"] * p.grad.data)
 
-                p.data -= velocity
+                    p.data -= velocity
 
 
 def _optimizer_action(
@@ -210,9 +211,9 @@ class SGDEnv(AbstractMADACEnv):
                 self.train_loader,
                 self.device,
             ]
+            self.optimizer.step()
             self.optimizer.zero_grad()
             self.train_loss, self.train_accuracy = self.forward_backward(*train_args)
-            self.optimizer.step()
 
         crashed = (
             not np.isfinite(self.train_loss).any()

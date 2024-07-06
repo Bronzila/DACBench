@@ -164,7 +164,7 @@ class SGDBenchmark(AbstractBenchmark):
         for func in self.wrap_funcs:
             env = func(env)
 
-        print(f"Running on device: {self.config.device}")
+        print(f"Running on device: {self.config['device']}")
 
         return env
 
