@@ -390,11 +390,7 @@ class SGDEnv(AbstractMADACEnv):
         Returns:
             float: The calculated reward
         """
-        if self.test_losses is not None:
-            reward = self.test_losses.sum().item() / len(self.test_loader.dataset)
-        else:
-            reward = 0.0
-        return torch.tensor(-reward)
+        return torch.tensor(-self.validation_loss)
 
     def get_default_state(self, _) -> torch.Tensor:
         """Default state function.
