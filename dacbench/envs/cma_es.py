@@ -30,17 +30,22 @@ class CMAESEnv(AbstractMADACEnv):
         if options is None:
             options = {}
         super().reset_(seed)
-        self.dim, self.fid, self.iid, self.representation = self.instance
+        self.dim, self.fid, self.iid, self.init_sigma, self.init_pop = self.instance
         self.objective = IOH_function(
             self.fid, self.dim, self.iid, target_precision=1e-8
         )
-        self.es = ModularCMAES(
-            self.objective,
-            parameters=Parameters.from_config_array(
-                self.dim, np.array(self.representation).astype(int)
-            ),
+
+        parameters = Parameters.from_config_array(
+            self.dim, np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).astype(int)
         )
-        return self.get_state(self), {}
+        if "starting_point" in options:
+            parameters.sigma = options["starting_point"]["sigma"][0]
+            parameters.m = options["starting_point"][1]
+        else:
+            parameters.sigma = self.init_sigma
+            parameters.m = np.array(self.init_pop).reshape(self.dim, 1)
+        self.es = ModularCMAES(self.objective, parameters=parameters)
+
 
     def step(self, action):
         """Make one step of the environment."""

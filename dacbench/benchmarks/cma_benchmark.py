@@ -86,7 +86,7 @@ CMAES_DEFAULTS = objdict(
         "cutoff": 1e6,
         "seed": 0,
         "multi_agent": False,
-        "instance_set_path": "../instance_sets/modea/modea_train.csv",
+        "instance_set_path": "../instance_sets/modea/new_modea_set.csv",
         "test_set_path": "../instance_sets/modea/modea_train.csv",
         "benchmark_info": INFO,
     }
@@ -140,10 +140,13 @@ class CMAESBenchmark(AbstractBenchmark):
         self.config[keyword] = {}
         with open(path) as fh:
             for line in itertools.islice(fh, 1, None):
-                _id, dim, fid, iid, *representation = line.strip().split(",")
+                _id, dim, f_name, fid, iid, init_sigma, *init_pop = line.strip().split(
+                    ","
+                )
                 self.config[keyword][int(_id)] = [
                     int(dim),
                     int(fid),
                     int(iid),
-                    list(map(int, representation)),
+                    float(init_sigma),
+                    list(map(float, init_pop)),
                 ]
