@@ -269,7 +269,8 @@ class SGDEnv(AbstractMADACEnv):
                 1.0,
                 self.device,
             ]
-            self.test_losses, self.test_accuracies = test(*val_args)
+            test_losses, self.test_accuracies = test(*val_args)
+            self.test_loss = test_losses.mean()
 
         reward = self.get_reward(self)
 
@@ -359,7 +360,8 @@ class SGDEnv(AbstractMADACEnv):
             1.0,
             self.device,
         ]
-        self.test_losses, test_accuracies = test(*test_args)
+        test_losses, test_accuracies = test(*test_args)
+        self.test_loss = test_losses.mean()
 
         val_args = [
             self.model,
