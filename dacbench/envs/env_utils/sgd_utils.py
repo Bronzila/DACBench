@@ -256,6 +256,9 @@ def create_model(layer_specification, n_classes) -> nn.Sequential:
     layers = []
     for layer_type, layer_params in layer_specification:
         layer_class = layer_mapping[layer_type.upper()]
-        layer = layer_class(*layer_params)
+        if isinstance(layer_params, dict):
+            layer = layer_class(**layer_params)
+        else:
+            layer = layer_class(*layer_params)
         layers.append(layer)
     return nn.Sequential(*layers)
