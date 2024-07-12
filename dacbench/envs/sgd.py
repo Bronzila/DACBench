@@ -281,6 +281,7 @@ class SGDEnv(AbstractMADACEnv):
         Also perform a single forward/backward pass,
         not yet updating the neural network parameters.
         """
+        super().reset_()
         if options is None:
             options = {}
         instance = None
