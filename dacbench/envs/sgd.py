@@ -260,7 +260,8 @@ class SGDEnv(AbstractMADACEnv):
         ):
             self.min_validation_loss = self.validation_loss
 
-        if self._done:
+        # Calculate test loss after every epoch + when done
+        if self._done or self.c_step % len(self.train_loader) == 0:
             val_args = [
                 self.model,
                 self.loss_function,
@@ -271,6 +272,7 @@ class SGDEnv(AbstractMADACEnv):
             ]
             test_losses, self.test_accuracies = test(*val_args)
             self.test_loss = test_losses.mean()
+            self.test_accuracy = self.test_accuracies.mean()
 
         reward = self.get_reward(self)
 
@@ -360,6 +362,7 @@ class SGDEnv(AbstractMADACEnv):
         ]
         test_losses, test_accuracies = test(*test_args)
         self.test_loss = test_losses.mean()
+        self.test_accuracy = test_accuracies.mean()
 
         val_args = [
             self.model,
@@ -410,6 +413,7 @@ class SGDEnv(AbstractMADACEnv):
         )
         lr_hist_deltas = self.lr_history - log_learning_rate
 
+        # Statistics over whole net
         optimizer_state = self.optimizer.state_dict()["state"]
         norm_grad_layer = torch.ones(len(optimizer_state))
         norm_vel_layer = torch.ones(len(optimizer_state))
@@ -421,14 +425,28 @@ class SGDEnv(AbstractMADACEnv):
             norm_data_layer[param] = optimizer_state[param]["weights"].norm(p=2)
             all_weights.append(optimizer_state[param]["weights"].flatten())
 
+        first_layer_weights = torch.concat(all_weights[0:1])
+        first_layer_weight_mean = first_layer_weights.mean()
+        first_layer_weight_std = first_layer_weights.std()
+        first_layer_grad_norm = norm_grad_layer[0:1].mean()
+        first_layer_vel_norm = norm_vel_layer[0:1].mean()
+        first_layer_weights_norm = norm_data_layer[0:1].mean()
+
+        last_layer_weights = torch.concat(all_weights[-2:-1])
+        last_layer_weight_mean = last_layer_weights.mean()
+        last_layer_weight_std = last_layer_weights.std()
+        last_layer_grad_norm = norm_grad_layer[-2:-1].mean()
+        last_layer_vel_norm = norm_vel_layer[-2:-1].mean()
+        last_layer_weights_norm = norm_data_layer[-2:-1].mean()
+
         norm_grad_layer = norm_grad_layer.mean()
         norm_vel_layer = norm_vel_layer.mean()
         norm_data_layer = norm_data_layer.mean()
         all_weights = torch.concat(all_weights)
         mean_weight = all_weights.mean()
         std_weight = all_weights.std()
+        
         loss_ratio = np.log(self.validation_loss / self.train_loss)
-        # for module in self.model.modules:
 
         state = torch.cat(
             [
@@ -445,6 +463,16 @@ class SGDEnv(AbstractMADACEnv):
                 torch.tensor([norm_data_layer.item()]),
                 torch.tensor([mean_weight.item()]),
                 torch.tensor([std_weight.item()]),
+                torch.tensor([first_layer_grad_norm.item()]),
+                torch.tensor([first_layer_vel_norm.item()]),
+                torch.tensor([first_layer_weights_norm.item()]),
+                torch.tensor([first_layer_weight_mean.item()]),
+                torch.tensor([first_layer_weight_std.item()]),
+                torch.tensor([last_layer_grad_norm.item()]),
+                torch.tensor([last_layer_vel_norm.item()]),
+                torch.tensor([last_layer_weights_norm.item()]),
+                torch.tensor([last_layer_weight_mean.item()]),
+                torch.tensor([last_layer_weight_std.item()]),
             ]
         )
         if self.epoch_mode:
