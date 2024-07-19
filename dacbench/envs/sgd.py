@@ -300,7 +300,7 @@ class SGDEnv(AbstractMADACEnv):
         self.datasets, loaders = random_torchvision_loader(
             run_seed,
             self.instance_set_path,
-            self.dataset_name if self.instance is None else self.instance[0],
+            self.dataset_name if self.instance_mode != "instance_set" else self.instance[0],
             self.batch_size,
             self.fraction_of_dataset,
             self.train_validation_ratio,
