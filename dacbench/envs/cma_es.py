@@ -42,6 +42,7 @@ class CMAESEnv(AbstractMADACEnv):
         self.objective = IOH_function(
             self.fid, self.dim, self.iid, target_precision=1e-8
         )
+        self.target = self.objective.get_target()
 
         parameters = Parameters.from_config_array(
             self.dim, np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).astype(int)
