@@ -52,6 +52,7 @@ class CMAESEnv(AbstractMADACEnv):
         else:
             parameters.sigma = self.init_sigma
             parameters.m = np.array(self.init_pop).reshape(self.dim, 1)
+        parameters.budget = self.budget
         self.es = ModularCMAES(self.objective, parameters=parameters)
 
         self.es.step()
@@ -158,15 +159,15 @@ class CMAESEnv(AbstractMADACEnv):
 
         return torch.concat(
             (
-                torch.tensor(self.es.parameters.ps.reshape(-1)),
-                torch.tensor([self.es.parameters.sigma]),
                 torch.tensor(
                     [
                         (self.es.parameters.budget - self.es.parameters.used_budget)
                         / self.es.parameters.budget
                     ]
                 ),
+                torch.tensor([self.es.parameters.sigma]),
                 torch.tensor(self._delta_f_opt),
+                torch.tensor(self.es.parameters.ps.reshape(-1)),
                 # torch.tensor(self._delta_f).flatten(),
                 torch.tensor(self._sigma_hist),
                 torch.tensor([self.fid]),
