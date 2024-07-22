@@ -141,6 +141,7 @@ class SGDEnv(AbstractMADACEnv):
     def __init__(self, config):
         """Init env."""
         super().__init__(config)
+        torch.use_deterministic_algorithms(True) # For reproducibility
         self.epoch_mode = config.get("epoch_mode", True)
         self.device = config.get("device")
 
@@ -295,6 +296,8 @@ class SGDEnv(AbstractMADACEnv):
         else:
             run_seed = self.initial_seed
         set_global_seeds(run_seed)
+
+        print(run_seed)
 
         # Get loaders for instance
         self.datasets, loaders = random_torchvision_loader(
