@@ -167,6 +167,8 @@ class CMAESEnv(AbstractMADACEnv):
                     ]
                 ),
                 torch.tensor([self.es.parameters.sigma]),
+                torch.tensor([self.es.parameters.population.f.mean()]),
+                torch.tensor([self.es.parameters.population.f.std()]),
                 torch.tensor(self._delta_f_opt),
                 torch.tensor(self.es.parameters.ps.reshape(-1)),
                 # torch.tensor(self._delta_f).flatten(),
