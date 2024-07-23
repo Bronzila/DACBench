@@ -449,7 +449,7 @@ class SGDEnv(AbstractMADACEnv):
         all_weights = torch.concat(all_weights)
         mean_weight = all_weights.mean()
         var_weight = all_weights.var()
-        is_train_loss_finite = int(torch.isfinite(self.train_loss))
+        is_train_loss_finite = int(np.isfinite(self.train_loss))
 
         loss_ratio = np.log(self.validation_loss / self.train_loss)
 
