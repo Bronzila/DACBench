@@ -186,7 +186,7 @@ class SGDEnv(AbstractMADACEnv):
         truncated = super().step_()
         info = {}
 
-        log_learning_rate = action
+        log_learning_rate = float(action)
         self.learning_rate = 10**log_learning_rate
 
         # Update action history
@@ -284,7 +284,7 @@ class SGDEnv(AbstractMADACEnv):
         Also perform a single forward/backward pass,
         not yet updating the neural network parameters.
         """
-        super().reset_()
+        super().reset_(seed=seed)
         if options is None:
             options = {}
 
