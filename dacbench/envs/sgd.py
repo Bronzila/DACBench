@@ -420,35 +420,37 @@ class SGDEnv(AbstractMADACEnv):
         optimizer_state = self.optimizer.state_dict()["state"]
         norm_grad_layer = torch.ones(len(optimizer_state))
         norm_vel_layer = torch.ones(len(optimizer_state))
-        norm_data_layer = torch.ones(len(optimizer_state))
+        norm_weights_layer = torch.ones(len(optimizer_state))
         all_weights = []
         for param in optimizer_state.keys():
             norm_grad_layer[param] = optimizer_state[param]["grad"].norm(p=2)
             norm_vel_layer[param] = optimizer_state[param]["vel"].norm(p=2)
-            norm_data_layer[param] = optimizer_state[param]["weights"].norm(p=2)
+            norm_weights_layer[param] = optimizer_state[param]["weights"].norm(p=2)
             all_weights.append(optimizer_state[param]["weights"].flatten())
 
         first_layer_weights = torch.concat(all_weights[0:1])
         first_layer_weight_mean = first_layer_weights.mean()
-        first_layer_weight_std = first_layer_weights.std()
+        first_layer_weight_var = first_layer_weights.var()
         first_layer_grad_norm = norm_grad_layer[0:1].mean()
         first_layer_vel_norm = norm_vel_layer[0:1].mean()
-        first_layer_weights_norm = norm_data_layer[0:1].mean()
+        first_layer_weights_norm = norm_weights_layer[0:1].mean()
 
         last_layer_weights = torch.concat(all_weights[-2:-1])
         last_layer_weight_mean = last_layer_weights.mean()
-        last_layer_weight_std = last_layer_weights.std()
+        last_layer_weight_var = last_layer_weights.var()
         last_layer_grad_norm = norm_grad_layer[-2:-1].mean()
         last_layer_vel_norm = norm_vel_layer[-2:-1].mean()
-        last_layer_weights_norm = norm_data_layer[-2:-1].mean()
+        last_layer_weights_norm = norm_weights_layer[-2:-1].mean()
 
         norm_grad_layer = norm_grad_layer.mean()
         norm_vel_layer = norm_vel_layer.mean()
-        norm_data_layer = norm_data_layer.mean()
+        norm_weights_layer = norm_weights_layer.mean()
+
         all_weights = torch.concat(all_weights)
         mean_weight = all_weights.mean()
-        std_weight = all_weights.std()
-        
+        var_weight = all_weights.var()
+        is_train_loss_finite = int(torch.isfinite(self.train_loss))
+
         loss_ratio = np.log(self.validation_loss / self.train_loss)
 
         state = torch.cat(
@@ -456,6 +458,8 @@ class SGDEnv(AbstractMADACEnv):
                 remaining_budget,
                 torch.tensor([log_learning_rate]),
                 torch.tensor(lr_hist_deltas[1:]),  # first one always 0
+                torch.tensor([is_train_loss_finite]),
+                torch.tensor([self.initial_learning_rate]),
                 torch.tensor([self.train_loss]),
                 torch.tensor([self.validation_loss]),
                 torch.tensor([loss_ratio]),
@@ -463,19 +467,19 @@ class SGDEnv(AbstractMADACEnv):
                 torch.tensor([self.validation_accuracy]),
                 torch.tensor([norm_grad_layer.item()]),
                 torch.tensor([norm_vel_layer.item()]),
-                torch.tensor([norm_data_layer.item()]),
+                torch.tensor([norm_weights_layer.item()]),
                 torch.tensor([mean_weight.item()]),
-                torch.tensor([std_weight.item()]),
+                torch.tensor([var_weight.item()]),
                 torch.tensor([first_layer_grad_norm.item()]),
                 torch.tensor([first_layer_vel_norm.item()]),
                 torch.tensor([first_layer_weights_norm.item()]),
                 torch.tensor([first_layer_weight_mean.item()]),
-                torch.tensor([first_layer_weight_std.item()]),
+                torch.tensor([first_layer_weight_var.item()]),
                 torch.tensor([last_layer_grad_norm.item()]),
                 torch.tensor([last_layer_vel_norm.item()]),
                 torch.tensor([last_layer_weights_norm.item()]),
                 torch.tensor([last_layer_weight_mean.item()]),
-                torch.tensor([last_layer_weight_std.item()]),
+                torch.tensor([last_layer_weight_var.item()]),
             ]
         )
         if self.epoch_mode:

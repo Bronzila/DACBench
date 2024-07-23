@@ -112,14 +112,14 @@ SGD_DEFAULTS = objdict(
         # "state_method":,       # Can be set, to replace the default function
         "use_momentum": False,
         "seed": 0,
-        "crash_penalty": -100.0,
-        "initial_learning_rate": 0.001,
+        "crash_penalty": -10000.0,
+        "initial_learning_rate": 0.002,
         "multi_agent": False,
         "instance_set_path": "../instance_sets/sgd/sgd_train_100instances.csv",
         "benchmark_info": INFO,
         "dataset": "MNIST",  # MNIST, CIFAR10, FashionMNIST
         "epoch_mode": False,
-        "instance_mode": "instance_set",
+        "instance_mode": "random_seed",
     }
 )
 
