@@ -459,7 +459,7 @@ class SGDEnv(AbstractMADACEnv):
                 torch.tensor([log_learning_rate]),
                 torch.tensor(lr_hist_deltas[1:]),  # first one always 0
                 torch.tensor([is_train_loss_finite]),
-                torch.tensor([self.initial_learning_rate]),
+                torch.tensor([math.log10(self.initial_learning_rate)]),
                 torch.tensor([self.train_loss]),
                 torch.tensor([self.validation_loss]),
                 torch.tensor([loss_ratio]),
