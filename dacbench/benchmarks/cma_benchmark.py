@@ -86,8 +86,8 @@ CMAES_DEFAULTS = objdict(
         "cutoff": 1e6,
         "seed": 0,
         "multi_agent": False,
-        "instance_set_path": "../instance_sets/modea/new_modea_set.csv",
-        "test_set_path": "../instance_sets/modea/modea_train.csv",
+        "instance_set_path": "../instance_sets/modea/new_modea_train_set.csv",
+        "test_set_path": "../instance_sets/modea/new_modea_train_set.csv",
         "benchmark_info": INFO,
     }
 )
