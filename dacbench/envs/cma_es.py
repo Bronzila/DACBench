@@ -86,7 +86,7 @@ class CMAESEnv(AbstractMADACEnv):
         self.es.parameters.sigma = action
 
         self._sigma_hist.pop()
-        self._sigma_hist.appendleft(action)
+        self._sigma_hist.appendleft(torch.tensor(action))
 
         terminated = not self.es.step()
 
