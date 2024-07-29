@@ -333,6 +333,7 @@ class SGDEnv(AbstractMADACEnv):
             )
 
         self.learning_rate = self.initial_learning_rate
+        self.lr_history = deque(torch.ones(5) * math.log10(self.initial_learning_rate))
         self.optimizer_type = SGD_Momentum
         self.info = {}
         self._done = False
