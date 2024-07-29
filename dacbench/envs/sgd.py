@@ -297,7 +297,7 @@ class SGDEnv(AbstractMADACEnv):
             run_seed = self.initial_seed
         set_global_seeds(run_seed)
 
-        print(run_seed)
+        print(f"run_seed: {run_seed}", flush=True)
 
         # Get loaders for instance
         self.datasets, loaders = random_torchvision_loader(
@@ -412,7 +412,7 @@ class SGDEnv(AbstractMADACEnv):
         log_learning_rate = (
             np.log10(self.learning_rate)
             if self.learning_rate != 0
-            else math.log10(1e-10)
+            else np.log10(1e-10)
         )
         lr_hist_deltas = self.lr_history - log_learning_rate
 
