@@ -488,8 +488,8 @@ class AbstractBenchmark(ABC):
                 self.config["observation_space"]
             )
 
-        elif "observation_space_class" in config:  # noqa: SIM102
-            if config.observation_space_class == "Dict":
+        elif "observation_space_class" in self.config:  # noqa: SIM102
+            if self.config["observation_space_class"] == "Dict":
                 self.config["observation_space_args"] = [
                     self.dictify_json(self.config["observation_space_args"])
                 ]
