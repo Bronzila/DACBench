@@ -117,14 +117,7 @@ class CMAESEnv(AbstractMADACEnv):
             float: The calculated reward
         """
 
-        # Inter generational delta f without history
-        # Basically the change in best function value between last and current pop
-        return torch.tensor(
-            max(
-                self.reward_range[0],
-                min(self.reward_range[1], -self.es.parameters.fopt),
-            )
-        )
+        return torch.tensor(-self.es.parameters.fopt)
 
     def get_default_state(self, *_):
         """Default state function.
