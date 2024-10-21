@@ -1,10 +1,11 @@
-import ray
-from ray.tune.registry import register_env
-from ray.rllib.agents import ppo
+"""Ray PPO example."""
+import argparse
 
+import ray
 from dacbench import benchmarks
 from dacbench.wrappers import ObservationWrapper
-import argparse
+from ray.rllib.agents import ppo
+from ray.tune.registry import register_env
 
 
 def make_benchmark(config):
@@ -18,7 +19,11 @@ def make_benchmark(config):
 parser = argparse.ArgumentParser(description="Run ray PPO for DACBench")
 parser.add_argument("--outdir", type=str, default="output", help="Output directory")
 parser.add_argument(
-    "--benchmarks", nargs="+", type=str, default=["LubyBenchmark"], help="Benchmarks to run PPO for"
+    "--benchmarks",
+    nargs="+",
+    type=str,
+    default=["LubyBenchmark"],
+    help="Benchmarks to run PPO for",
 )
 parser.add_argument(
     "--timesteps", type=int, default=10000, help="Number of timesteps to run"

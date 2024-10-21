@@ -1,17 +1,16 @@
+"""Run and log an experiment."""
 from pathlib import Path
 
-from dacbench.plotting import plot_performance, plot_performance_per_instance
-from dacbench.logger import Logger, log2dataframe, load_logs
+import matplotlib.pyplot as plt
 from dacbench.agents.simple_agents import RandomAgent
 from dacbench.benchmarks import SigmoidBenchmark
+from dacbench.logger import Logger, load_logs, log2dataframe
+from dacbench.plotting import plot_performance, plot_performance_per_instance
 from dacbench.runner import run_benchmark
 from dacbench.wrappers import PerformanceTrackingWrapper, StateTrackingWrapper
 
-import matplotlib.pyplot as plt
-
 # Run an experiment and log the results
 if __name__ == "__main__":
-
     # Make benchmark
     bench = SigmoidBenchmark()
 
@@ -30,7 +29,6 @@ if __name__ == "__main__":
     performance_logger = logger.add_module(PerformanceTrackingWrapper)
 
     for s in seeds:
-
         # Make & wrap benchmark environment
         env = bench.get_benchmark(seed=s)
         env = PerformanceTrackingWrapper(env, logger=performance_logger)

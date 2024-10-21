@@ -12,6 +12,7 @@ from dacbench.envs.sigmoid import (
 )
 from dacbench.envs.theory import TheoryEnv
 from dacbench.envs.toysgd import ToySGDEnv
+from dacbench.envs.toysgd_2D import ToySGD2DEnv
 
 __all__ = [
     "LubyEnv",
@@ -21,32 +22,21 @@ __all__ = [
     "ContinuousStateSigmoidEnv",
     "FastDownwardEnv",
     "ToySGDEnv",
+    "ToySGD2DEnv",
     "GeometricEnv",
     "TheoryEnv",
 ]
 
-cma_spec = importlib.util.find_spec("cma")
-found = cma_spec is not None
+modcma_spec = importlib.util.find_spec("modcma")
+found = modcma_spec is not None
 if found:
     from dacbench.envs.cma_es import CMAESEnv
 
     __all__.append("CMAESEnv")
 else:
-    warnings.warn(
-        "CMA-ES Benchmark not installed. If you want to use this benchmark, please follow the installation guide."
-    )
-
-modcma_spec = importlib.util.find_spec("modcma")
-found = modcma_spec is not None
-if found:
-    from dacbench.envs.cma_step_size import CMAStepSizeEnv
-    from dacbench.envs.modcma import ModCMAEnv
-
-    __all__.append("ModCMAEnv")
-    __all__.append("CMAStepSizeEnv")
-else:
-    warnings.warn(
-        "ModCMA Benchmark not installed. If you want to use this benchmark, please follow the installation guide."
+    warnings.warn(  # noqa: B028
+        "CMA-ES Benchmark not installed. If you want to use this benchmark, "
+        "please follow the installation guide."
     )
 
 sgd_spec = importlib.util.find_spec("backpack")
@@ -56,6 +46,7 @@ if found:
 
     __all__.append("SGDEnv")
 else:
-    warnings.warn(
-        "SGD Benchmark not installed. If you want to use this benchmark, please follow the installation guide."
+    warnings.warn(  # noqa: B028
+        "SGD Benchmark not installed. If you want to use this benchmark, "
+        "please follow the installation guide."
     )

@@ -1,7 +1,8 @@
+"""Example for the multi agent with sigmoid."""
 from dacbench.benchmarks import SigmoidBenchmark
 
 bench = SigmoidBenchmark()
-bench.config['multi_agent'] = True
+bench.config["multi_agent"] = True
 env = bench.get_environment()
 env.register_agent(0)
 env.register_agent(1)

@@ -1,18 +1,20 @@
+"""Wrapper for instance sampling."""
+from __future__ import annotations
+
 import numpy as np
 from gymnasium import Wrapper
 from scipy.stats import norm
 
 
 class InstanceSamplingWrapper(Wrapper):
-    """
-    Wrapper to sample a new instance at a given time point.
+    """Wrapper to sample a new instance at a given time point.
 
-    Instances can either be sampled using a given method or a distribution infered from a given list of instances.
+    Instances can either be sampled using a given method
+    or a distribution infered from a given list of instances.
     """
 
     def __init__(self, env, sampling_function=None, instances=None, reset_interval=0):
-        """
-        Initialize wrapper.
+        """Initialize wrapper.
 
         Either sampling_function or instances must be given
 
@@ -28,7 +30,7 @@ class InstanceSamplingWrapper(Wrapper):
             additional episodes for which to keep an instance
 
         """
-        super(InstanceSamplingWrapper, self).__init__(env)
+        super().__init__(env)
         if sampling_function:
             self.sampling_function = sampling_function
         elif instances:
@@ -39,8 +41,7 @@ class InstanceSamplingWrapper(Wrapper):
         self.reset_tracker = 0
 
     def __setattr__(self, name, value):
-        """
-        Set attribute in wrapper if available and in env if not.
+        """Set attribute in wrapper if available and in env if not.
 
         Parameters
         ----------
@@ -56,15 +57,14 @@ class InstanceSamplingWrapper(Wrapper):
             setattr(self.env, name, value)
 
     def __getattribute__(self, name):
-        """
-        Get attribute value of wrapper if available and of env if not.
+        """Get attribute value of wrapper if available and of env if not.
 
         Parameters
         ----------
         name : str
             Attribute to get
 
-        Returns
+        Returns:
         -------
         value
             Value of given name
@@ -73,14 +73,12 @@ class InstanceSamplingWrapper(Wrapper):
         if name in ["sampling_function", "env", "fit_dist", "reset"]:
             return object.__getattribute__(self, name)
 
-        else:
-            return getattr(self.env, name)
+        return getattr(self.env, name)
 
     def reset(self):
-        """
-        Reset environment and use sampled instance for training.
+        """Reset environment and use sampled instance for training.
 
-        Returns
+        Returns:
         -------
         np.array
             state
@@ -92,15 +90,14 @@ class InstanceSamplingWrapper(Wrapper):
         return self.env.reset()
 
     def fit_dist(self, instances):
-        """
-        Approximate instance distribution in given instance set.
+        """Approximate instance distribution in given instance set.
 
         Parameters
         ----------
         instances : List
             instance set
 
-        Returns
+        Returns:
         -------
         method
             sampling method for new instances
@@ -108,14 +105,15 @@ class InstanceSamplingWrapper(Wrapper):
         """
         dists = []
         for i in range(len(instances[0])):
-            component = [instances[k][i] for k in instances.keys()]
+            component = [instances[k][i] for k in instances]
             dist = norm.fit(component)
             dists.append(dist)
 
         def sample():
             instance = []
+            rng = np.random.default_rng()
             for d in dists:
-                instance.append(np.random.normal(d[0], d[1]))
+                instance.append(rng.normal(d[0], d[1]))
             return instance
 
         return sample

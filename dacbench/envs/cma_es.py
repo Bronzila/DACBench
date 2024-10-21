@@ -1,257 +1,180 @@
-"""
-CMA-ES environment adapted from CMAWorld in
-"Learning Step-size Adaptation in CMA-ES"
-by G.Shala and A. Biedenkapp and N.Awad and S. Adriaensen and M.Lindauer and F. Hutter.
-Original author: Gresa Shala
-"""
+"""CMA ES Environment."""
 
-import resource
-import sys
-import threading
-import warnings
+from __future__ import annotations
+
 from collections import deque
+from collections.abc import Callable
 
 import numpy as np
-from cma import bbobbenchmarks as bn
-from cma.evolution_strategy import CMAEvolutionStrategy
+import torch
+from IOHexperimenter import IOH_function
+from modcma import ModularCMAES, Parameters
 
-from dacbench import AbstractEnv
-
-resource.setrlimit(resource.RLIMIT_STACK, (2**35, -1))
-sys.setrecursionlimit(10**9)
-
-warnings.filterwarnings("ignore")
+from dacbench import AbstractMADACEnv
 
 
-def _norm(x):
-    return np.sqrt(np.sum(np.square(x)))
+def _norm(x: np.ndarray) -> np.ndarray:
+    return np.sqrt(np.sum(np.square(x)))  # type: ignore
 
 
-# IDEA: if we ask cma instead of ask_eval, we could make this parallel
+class CMAESEnv(AbstractMADACEnv):
+    """The CMA ES environment controlles the step size on BBOB functions."""
 
+    def __init__(self, config: dict) -> None:
+        """Initialize the environment."""
+        super().__init__(config)
 
-class CMAESEnv(AbstractEnv):
-    """
-    Environment to control the step size of CMA-ES
-    """
+        self.es: ModularCMAES
+        self.budget = config.budget  # type: ignore
+        self.total_budget = self.budget
 
-    def __init__(self, config):
-        """
-        Initialize CMA Env
+        self._hist_len = 10
 
-        Parameters
-        -------
-        config : objdict
-            Environment configuration
-        """
-        super(CMAESEnv, self).__init__(config)
-        self.b = None
-        self.bounds = [None, None]
-        self.fbest = None
-        self.history_len = config.hist_length
-        self.history = deque(maxlen=self.history_len)
-        self.past_obj_vals = deque(maxlen=self.history_len)
-        self.past_sigma = deque(maxlen=self.history_len)
-        self.solutions = None
-        self.func_values = []
-        self.cur_obj_val = -1
-        # self.chi_N = dim ** 0.5 * (1 - 1.0 / (4.0 * dim) + 1.0 / (21.0 * dim ** 2))
-        self.lock = threading.Lock()
-        self.popsize = config["popsize"]
-        self.cur_ps = self.popsize
-
-        if "reward_function" in config.keys():
-            self.get_reward = config["reward_function"]
-        else:
-            self.get_reward = self.get_default_reward
-
-        if "state_method" in config.keys():
-            self.get_state = config["state_method"]
-        else:
-            self.get_state = self.get_default_state
-
-    def step(self, action):
-        """
-        Execute environment step
-
-        Parameters
-        ----------
-        action : list
-            action to execute
-
-        Returns
-        -------
-        np.array, float, bool, dict
-            state, reward, done, info
-        """
-        truncated = super(CMAESEnv, self).step_()
-        self.history.append([self.f_difference, self.velocity])
-        terminated = self.es.stop() != {}
-        if not (terminated or truncated):
-            """Moves forward in time one step"""
-            sigma = action
-            self.es.tell(self.solutions, self.func_values)
-            self.es.sigma = np.maximum(sigma, 0.2)
-            self.solutions, self.func_values = self.es.ask_and_eval(self.fcn)
-
-        self.f_difference = np.nan_to_num(
-            np.abs(np.amax(self.func_values) - self.cur_obj_val)
-            / float(self.cur_obj_val)
+        self.get_reward = config.get("reward_function", self.get_default_reward)
+        self.get_state: Callable[[CMAESEnv], torch.Tensor] = config.get(
+            "state_method", self.get_default_state
         )
-        self.velocity = np.nan_to_num(
-            np.abs(np.amin(self.func_values) - self.cur_obj_val)
-            / float(self.cur_obj_val)
-        )
-        self.fbest = min(self.es.best.f, np.amin(self.func_values))
 
-        self.past_obj_vals.append(self.cur_obj_val)
-        self.past_sigma.append(self.cur_sigma)
-        self.cur_ps = _norm(self.es.adapt_sigma.ps)
-        self.cur_loc = self.es.best.x
-        try:
-            self.cur_sigma = [self.es.sigma[0]]
-        except:
-            self.cur_sigma = [self.es.sigma]
-        self.cur_obj_val = self.es.best.f
+    def reset(
+        self, seed: int | None = None, options: dict | None = None
+    ) -> tuple[torch.Tensor, dict]:
+        """Reset the environment."""
+        if options is None:
+            options = {}
+        super().reset_(seed)
+        self.dim, self.fid, self.iid, self.init_sigma, self.init_pop = self.instance
+        self.objective = IOH_function(
+            self.fid, self.dim, self.iid, target_precision=1e-8
+        )
+        self.target = self.objective.get_target()
+
+        parameters = Parameters.from_config_array(
+            self.dim, np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).astype(int)
+        )
+        if "starting_point" in options:
+            parameters.sigma = options["starting_point"]["sigma"][0]
+            parameters.m = options["starting_point"][1]
+        else:
+            parameters.sigma = self.init_sigma
+            parameters.m = np.array(self.init_pop).reshape(self.dim, 1)
+        parameters.budget = self.budget
+        self.es = ModularCMAES(self.objective, parameters=parameters)
+
+        self.es.step()
+        self.c_step = 0
+
+        self._chi_N = self.dim**0.5 * (
+            1 - 1.0 / (4.0 * self.dim) + 1.0 / (21.0 * self.dim**2)
+        )
+
+        self._xopts = deque(np.zeros((self._hist_len, self.dim)))
+        self._fopts = deque(np.ones(self._hist_len) * self.es.parameters.fopt)
+        self._f = deque(np.zeros(self._hist_len, self.es.parameters.lambda_))
+        self._f[0] = self.es.parameters.population.f
+        self._sigma_hist = deque(np.zeros(self._hist_len))
+        self._sigma_hist[0] = self.init_sigma
+
+        self.norm_delta_f = lambda p, q: (p - q) / (abs(p - q) + abs(q) + 1e-5)
+        delta_bounds = self.es.parameters.ub - self.es.parameters.lb
+        self.norm_delta_x = lambda p, q: (p - q) / delta_bounds
+
+        self._delta_f_opt = deque(torch.zeros(self._hist_len))
+        self._delta_f = deque(torch.zeros(2, self.es.parameters.lambda_))
+
+        return self.get_state(self), {"start": [self.init_sigma, self.init_pop]}
+
+    def step(
+        self, action: float
+    ) -> tuple[torch.Tensor, torch.Tensor, bool, bool, dict]:
+        """Make one step of the environment."""
+        truncated = super().step_()
+
+        self.es.parameters.sigma = action
+
+        self._sigma_hist.pop()
+        self._sigma_hist.appendleft(torch.tensor(action))
+
+        terminated = not self.es.step()
+
+        self._cur_ps = _norm(self.es.parameters.ps) / self._chi_N - 1
+
+        self._f.pop()
+        self._f.appendleft(self.es.parameters.population.f)
+
+        self._xopts.pop()
+        self._xopts.appendleft(self.es.parameters.xopt)
+
+        self._fopts.pop()
+        self._fopts.appendleft(self.es.parameters.fopt)
 
         return self.get_state(self), self.get_reward(self), terminated, truncated, {}
 
-    def reset(self, seed=None, options={}):
-        """
-        Reset environment
-
-        Returns
-        -------
-        np.array
-            Environment state
-        """
-        super(CMAESEnv, self).reset_(seed)
-        self.history.clear()
-        self.past_obj_vals.clear()
-        self.past_sigma.clear()
-        self.cur_loc = self.instance[3]
-        self.dim = self.instance[1]
-        self.init_sigma = self.instance[2]
-        self.cur_sigma = [self.init_sigma]
-        self.fcn = bn.instantiate(self.instance[0], seed=self.seed)[0]
-
-        self.func_values = []
-        self.f_vals = deque(maxlen=self.popsize)
-        self.es = CMAEvolutionStrategy(
-            self.cur_loc,
-            self.init_sigma,
-            {"popsize": self.popsize, "bounds": self.bounds, "seed": self.initial_seed},
-        )
-        self.solutions, self.func_values = self.es.ask_and_eval(self.fcn)
-        self.fbest = self.func_values[np.argmin(self.func_values)]
-        self.f_difference = np.abs(
-            np.amax(self.func_values) - self.cur_obj_val
-        ) / float(self.cur_obj_val)
-        self.velocity = np.abs(np.amin(self.func_values) - self.cur_obj_val) / float(
-            self.cur_obj_val
-        )
-        self.es.mean_old = self.es.mean
-        self.history.append([self.f_difference, self.velocity])
-        return self.get_state(self), {}
-
-    def close(self):
-        """
-        No additional cleanup necessary
-
-        Returns
-        -------
-        bool
-            Cleanup flag
-        """
+    def close(self) -> bool:
+        """Closes the environment."""
         return True
 
-    def render(self, mode: str = "human"):
+    def get_default_reward(self, *_: tuple) -> torch.Tensor:
+        """The default reward function.
+
+        Args:
+            _ (_type_): Empty parameter, which can be used when overriding
+
+        Returns:
+            float: The calculated reward
         """
-        Render env in human mode
+        return torch.tensor(-self.es.parameters.fopt)
 
-        Parameters
-        ----------
-        mode : str
-            Execution mode
+    def get_default_state(self, *_: tuple) -> torch.Tensor:
+        """Default state function.
+
+        Args:
+            _ (_type_): Empty parameter, which can be used when overriding
+
+        Returns:
+            dict: The current state
         """
-        if mode != "human":
-            raise NotImplementedError
+        # Inter-generational delta f (normalized diff between max of the last generation)
+        self._delta_f_opt.pop()
+        self._delta_f_opt.appendleft(self.norm_delta_f(self._fopts[0], self._fopts[1]))
 
-        pass
-
-    def get_default_reward(self, _):
-        """
-        Compute reward
-
-        Returns
-        -------
-        float
-            Reward
-
-        """
-        reward = min(self.reward_range[1], max(self.reward_range[0], -self.fbest))
-        return reward
-
-    def get_default_state(self, _):
-        """
-        Gather state description
-
-        Returns
-        -------
-        dict
-            Environment state
-
-        """
-        past_obj_val_deltas = []
-        for i in range(1, len(self.past_obj_vals)):
-            past_obj_val_deltas.append(
-                (self.past_obj_vals[i] - self.past_obj_vals[i - 1] + 1e-3)
-                / float(self.past_obj_vals[i - 1])
-            )
-        if len(self.past_obj_vals) > 0:
-            past_obj_val_deltas.append(
-                (self.cur_obj_val - self.past_obj_vals[-1] + 1e-3)
-                / float(self.past_obj_vals[-1])
-            )
-        past_obj_val_deltas = np.array(past_obj_val_deltas).reshape(-1)
-
-        history_deltas = []
-        for i in range(len(self.history)):
-            history_deltas.append(self.history[i])
-        history_deltas = np.array(history_deltas).reshape(-1)
-        past_sigma_deltas = []
-        for i in range(len(self.past_sigma)):
-            past_sigma_deltas.append(self.past_sigma[i])
-        past_sigma_deltas = np.array(past_sigma_deltas).reshape(-1)
-        past_obj_val_deltas = np.hstack(
-            (
-                np.zeros((self.history_len - past_obj_val_deltas.shape[0],)),
-                past_obj_val_deltas,
-            )
+        # normalized diff between function values of 2 consecutive generations
+        self._delta_f.pop()
+        self._delta_f.appendleft(
+            (self.norm_delta_f(self._f[0], self._f[1])).astype(np.float32)
         )
-        history_deltas = np.hstack(
+        # # Intra-generational delta f (normalized diff between max and min fitness of current pop)
+        # best_f = np.min(self.es.parameters.population.f)
+        # worst_f = np.max(self.es.parameters.population.f)
+        # intra_delta_f.append(self.norm_delta_f(best_f, worst_f))
+
+        # # Inter-generational delta X (normalized diff between the best genotypes in two consecutive generations)
+        # inter_delta_x.append(self.norm_delta_x(self._xopts[i], self._xopts[i+1]))
+
+        # # Intra-generational delta X (normalized diff between the best and worst genotypes in pop)
+        # best_x = self.es.parameters.population.x[np.argmax(self.es.parameters.population.f)]
+        # worst_x = self.es.parameters.population.x[np.argmin(self.es.parameters.population.f)]
+        # intra_delta_x.append(self.norm_delta_x(best_x, worst_x))
+
+        return torch.concat(
             (
-                np.zeros((self.history_len * 2 - history_deltas.shape[0],)),
-                history_deltas,
-            )
-        )
-        past_sigma_deltas = np.hstack(
-            (
-                np.zeros((self.history_len - past_sigma_deltas.shape[0],)),
-                past_sigma_deltas,
+                torch.tensor(
+                    [
+                        (self.es.parameters.budget - self.es.parameters.used_budget)
+                        / self.es.parameters.budget
+                    ]
+                ),
+                torch.tensor([self.es.parameters.sigma]),
+                torch.tensor([self.es.parameters.population.f.mean()]),
+                torch.tensor([self.es.parameters.population.f.std()]),
+                torch.tensor(self._delta_f_opt),
+                torch.tensor(self.es.parameters.ps.reshape(-1)),
+                # torch.tensor(self._delta_f).flatten(),
+                torch.tensor(self._sigma_hist),
+                torch.tensor([self.fid]),
+                torch.tensor([self.iid]),
             )
         )
 
-        cur_loc = np.array(self.cur_loc)
-        cur_ps = np.array([self.cur_ps])
-        cur_sigma = np.array(self.cur_sigma)
-
-        state = {
-            "current_loc": cur_loc,
-            "past_deltas": past_obj_val_deltas,
-            "current_ps": cur_ps,
-            "current_sigma": cur_sigma,
-            "history_deltas": history_deltas,
-            "past_sigma_deltas": past_sigma_deltas,
-        }
-        return state
+    def render(self, mode: str = "human") -> None:
+        """Render progress."""
+        raise NotImplementedError("CMA-ES does not support rendering at this point")
