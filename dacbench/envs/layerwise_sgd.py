@@ -167,7 +167,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         if crashed:
             self._done = True
             return (
-                self.get_state(self),
+                self.get_state(),
                 torch.tensor(self.crash_penalty),
                 False,
                 True,
@@ -215,9 +215,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             self.test_loss = test_losses.mean()
             self.test_accuracy = self.test_accuracies.mean()
 
-        reward = self.get_reward(self)
+        reward = self.get_reward()
 
-        return self.get_states(self), reward, False, truncated, info
+        return self.get_states(), reward, False, truncated, info
 
     def reset(self, seed=None, options=None):
         """Initialize the neural network, data loaders, etc. for given/random next task.
@@ -327,9 +327,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         if self.epoch_mode:
             self.average_loss = 0
 
-        return self.get_state(self), {}
+        return self.get_state(), {}
 
-    def get_default_reward(self, _) -> torch.tensor:
+    def get_default_reward(self) -> torch.tensor:
         """The default reward function.
 
         Args:
@@ -340,7 +340,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         """
         return torch.tensor(-self.validation_loss)
 
-    def get_default_states(self, _) -> torch.Tensor:
+    def get_default_states(self) -> torch.Tensor:
         """Default state function.
 
         Args:
@@ -367,53 +367,70 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
 
         
         # Layerspecific observations
-        for param_group in self.optimizer.param_groups:
-
+        local_observations = []
+        parameterizable_layer_idx = 0
+        for layer_idx, param_group in enumerate(self.optimizer.param_groups):
+            # Layer encoding
+            layer = self.model[layer_idx]
+            layer_type = type(layer).__name__
+            
 
             log_learning_rate = (
-                np.log10(self.learning_rate)
-                if self.learning_rate != 0
+                np.log10(self.learning_rates[layer_idx])
+                if self.learning_rates[layer_idx] != 0
                 else np.log10(1e-10)
             )
+            local_observations.append(torch.tensor[log_learning_rate])
 
-        # Statistics over whole net
-        optimizer_state = self.optimizer.state_dict()["state"]
-        norm_grad_layer = torch.ones(len(optimizer_state))
-        norm_vel_layer = torch.ones(len(optimizer_state))
-        norm_weights_layer = torch.ones(len(optimizer_state))
-        all_weights = []
-        for param in optimizer_state.keys():
-            norm_grad_layer[param] = optimizer_state[param]["grad"].norm(p=2)
-            norm_vel_layer[param] = optimizer_state[param]["vel"].norm(p=2)
-            norm_weights_layer[param] = optimizer_state[param]["weights"].norm(p=2)
-            all_weights.append(optimizer_state[param]["weights"].flatten())
+            # Accumulate all elements from weights, gradients, and velocities
+            weights_all = []
+            grads_all = []
+            velocities_all = []
 
-        first_layer_weights = torch.concat(all_weights[0:1])
-        first_layer_weight_mean = first_layer_weights.mean()
-        first_layer_weight_var = first_layer_weights.var()
-        first_layer_grad_norm = norm_grad_layer[0:1].mean()
-        first_layer_vel_norm = norm_vel_layer[0:1].mean()
-        first_layer_weights_norm = norm_weights_layer[0:1].mean()
+            for param in param_group["params"]:
+                # Weights
+                weights_all.append(param.data.view(-1))
 
-        last_layer_weights = torch.concat(all_weights[-2:-1])
-        last_layer_weight_mean = last_layer_weights.mean()
-        last_layer_weight_var = last_layer_weights.var()
-        last_layer_grad_norm = norm_grad_layer[-2:-1].mean()
-        last_layer_vel_norm = norm_vel_layer[-2:-1].mean()
-        last_layer_weights_norm = norm_weights_layer[-2:-1].mean()
+                # Gradients
+                grads_all.append(param.grad.view(-1))
 
-        norm_grad_layer = norm_grad_layer.mean()
-        norm_vel_layer = norm_vel_layer.mean()
-        norm_weights_layer = norm_weights_layer.mean()
+                # Velocities               
+                state = self.optimizer.state[param]
+                velocities_all.append(state['momentum_buffer'].view(-1))
 
-        all_weights = torch.concat(all_weights)
-        mean_weight = all_weights.mean()
-        var_weight = all_weights.var()
-        is_train_loss_finite = int(np.isfinite(self.train_loss))
+            # Concatenate all
+            weights_all = torch.cat(weights_all)
+            weights_mean = weights_all.mean().item()
+            weights_var = weights_all.var().item()
+            weights_norm = weights_all.norm(p=2).item()
 
-        loss_ratio = np.log(self.validation_loss / self.train_loss)
+            grads_all = torch.cat(grads_all)
+            grads_mean = grads_all.mean().item()
+            grads_var = grads_all.var().item()
+            grads_norm = grads_all.norm(p=2).item()
 
-        state = torch.cat(
+            velocities_all = torch.cat(velocities_all)
+            velocities_mean = velocities_all.mean().item()
+            velocities_var = velocities_all.var().item()
+            velocities_norm = velocities_all.norm(p=2).item()
+
+            local_observations.extend(
+                [
+                    weights_mean,
+                    weights_var,
+                    weights_norm,
+                    grads_mean,
+                    grads_var,
+                    grads_norm,
+                    velocities_mean,
+                    velocities_var,
+                    velocities_norm,
+                ]
+            )
+
+        
+
+        optim_state = torch.cat(
             [
                 remaining_budget,
                 torch.tensor([log_learning_rate]),
@@ -437,9 +454,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             ]
         )
         if self.epoch_mode:
-            state.append(self.average_loss)
+            optim_state.append(self.average_loss)
 
-        return state
+        return optim_state
 
     def render(self, mode="human"):
         """Render progress."""
