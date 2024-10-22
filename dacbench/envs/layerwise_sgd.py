@@ -1,13 +1,15 @@
 """SGD environment."""
 
 from __future__ import annotations
+
 import math
 import random
+from collections import deque
+from typing import Any
 
 import numpy as np
 import torch
 
-from collections import deque
 from dacbench import AbstractMADACEnv
 from dacbench.envs.env_utils import sgd_utils
 from dacbench.envs.env_utils.sgd_utils import random_torchvision_loader
@@ -21,10 +23,15 @@ def set_global_seeds(seed: int) -> None:
 def _optimizer_actions(
     optimizer: torch.optim.Optimizer, actions: list[float]
 ) -> None:
-    for g, lr in zip(optimizer.param_groups, actions):
+    for g, lr in zip(optimizer.param_groups, actions, strict=True):
         g["lr"] = lr
-    return optimizer
 
+def _get_layer_encoding(layer_type: str) -> int:
+        if layer_type == "Linear":
+            return 0
+        if layer_type == "Conv2d":
+            return 1
+        raise ValueError("Unkown layer type.")
 
 def test(
     model,
@@ -102,7 +109,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         self.get_reward = config.get("reward_function", self.get_default_reward)
 
         # Use default state function, if no specific function is given
-        self.get_state = config.get("state_method", self.get_default_state)
+        self.get_states = config.get("state_method", self.get_default_states)
 
         self.learning_rate = config.get("initial_learning_rate")
         self.initial_learning_rate = config.get("initial_learning_rate")
@@ -133,7 +140,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         # Update action history
         self._update_lr_histories(log_learning_rates)
 
-        self.optimizer = _optimizer_actions(
+        _optimizer_actions(
             self.optimizer, self.learning_rates
         )
 
@@ -167,7 +174,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         if crashed:
             self._done = True
             return (
-                self.get_state(),
+                self.get_states(),
                 torch.tensor(self.crash_penalty),
                 False,
                 True,
@@ -217,7 +224,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
 
         reward = self.get_reward()
 
-        return self.get_states(), reward, False, truncated, info
+        return self.get_states(), reward, truncated, truncated, info
 
     def reset(self, seed=None, options=None):
         """Initialize the neural network, data loaders, etc. for given/random next task.
@@ -277,8 +284,11 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         self._done = False
 
         self.model.to(self.device)
+
+        # create param groups then feed them into optimizer
+        param_groups, self.layer_types = self._create_param_groups()
         self.optimizer: torch.optim.Optimizer = self.optimizer_type(
-            **self.optimizer_params, params=self.model.parameters(), lr=self.initial_learning_rate
+            param_groups, **self.optimizer_params,
         )
 
         self.n_layers = len(self.optimizer.param_groups)
@@ -327,7 +337,21 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         if self.epoch_mode:
             self.average_loss = 0
 
-        return self.get_state(), {}
+        return self.get_states(), {}
+
+    def _create_param_groups(self) -> tuple[list[Any], list[Any]]:
+        param_groups = []
+        layer_types = []
+        for layer in self.model.children():
+            if isinstance(layer, torch.nn.Linear | torch.nn.Conv2d):
+                param_groups.append(
+                    {
+                        "params": layer.parameters(),
+                        "lr": self.initial_learning_rate,
+                    }
+                )
+                layer_types.append(type(layer).__name__)
+        return param_groups, layer_types
 
     def get_default_reward(self) -> torch.tensor:
         """The default reward function.
@@ -340,7 +364,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         """
         return torch.tensor(-self.validation_loss)
 
-    def get_default_states(self) -> torch.Tensor:
+    def get_default_states(self) -> list[torch.Tensor]:
         """Default state function.
 
         Args:
@@ -349,8 +373,11 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         Returns:
             list[dict]: The current states of all layers
         """
+        states = []
         # Global observations
         remaining_budget = torch.tensor([(self.n_steps - self.c_step) / self.n_steps])
+        is_train_loss_finite = int(np.isfinite(self.train_loss))
+        loss_ratio = np.log(self.validation_loss / self.train_loss)
 
         global_observations = torch.cat(
             [
@@ -365,54 +392,65 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             ]
         )
 
-        
         # Layerspecific observations
-        local_observations = []
-        parameterizable_layer_idx = 0
         for layer_idx, param_group in enumerate(self.optimizer.param_groups):
+            local_observations = []
             # Layer encoding
-            layer = self.model[layer_idx]
-            layer_type = type(layer).__name__
-            
+            layer_type = self.layer_types[layer_idx]
+            layer_enc = _get_layer_encoding(layer_type)
+            depth_enc = layer_idx / len(self.optimizer.param_groups)
+            local_observations.append(torch.tensor([layer_enc]))
+            local_observations.append(torch.tensor([depth_enc]))
 
             log_learning_rate = (
                 np.log10(self.learning_rates[layer_idx])
                 if self.learning_rates[layer_idx] != 0
                 else np.log10(1e-10)
             )
-            local_observations.append(torch.tensor[log_learning_rate])
+            local_observations.append(torch.tensor([log_learning_rate]))
+            lr_hist_deltas = log_learning_rate - self.lr_histories[layer_idx]
+            local_observations.append(torch.tensor(lr_hist_deltas))
 
-            # Accumulate all elements from weights, gradients, and velocities
+            # Weight, gradient and momentum statistics
             weights_all = []
             grads_all = []
             velocities_all = []
 
             for param in param_group["params"]:
                 # Weights
-                weights_all.append(param.data.view(-1))
+                weights = param.data.view(-1)
+                weights_all.append(weights)
 
                 # Gradients
-                grads_all.append(param.grad.view(-1))
+                if param.grad is not None:
+                    grads_all.append(param.grad.view(-1))
+                else:
+                    print("Warning: No gradient data found. This should only occur in the first step.")
+                    grads_all.append(torch.zeros_like(weights))
 
-                # Velocities               
+                # Velocities
                 state = self.optimizer.state[param]
-                velocities_all.append(state['momentum_buffer'].view(-1))
+                if "momentum_buffer" in state:
+                    velocities_all.append(state["momentum_buffer"].view(-1))
+                else:
+                    print("Warning: No momentum data found. This should only occur for the first two steps.")
+                    velocities_all.append(torch.zeros_like(weights))
 
             # Concatenate all
             weights_all = torch.cat(weights_all)
-            weights_mean = weights_all.mean().item()
-            weights_var = weights_all.var().item()
-            weights_norm = weights_all.norm(p=2).item()
+            weights_mean = weights_all.mean().unsqueeze(0)
+            weights_var = weights_all.var().unsqueeze(0)
+            weights_norm = weights_all.norm(p=2).unsqueeze(0)
 
             grads_all = torch.cat(grads_all)
-            grads_mean = grads_all.mean().item()
-            grads_var = grads_all.var().item()
-            grads_norm = grads_all.norm(p=2).item()
+            grads_mean = grads_all.mean().unsqueeze(0)
+            grads_var = grads_all.var().unsqueeze(0)
+            grads_norm = grads_all.norm(p=2).unsqueeze(0)
 
             velocities_all = torch.cat(velocities_all)
-            velocities_mean = velocities_all.mean().item()
-            velocities_var = velocities_all.var().item()
-            velocities_norm = velocities_all.norm(p=2).item()
+            velocities_mean = velocities_all.mean().unsqueeze(0)
+            velocities_var = velocities_all.var().unsqueeze(0)
+            velocities_norm = velocities_all.norm(p=2).unsqueeze(0)
 
             local_observations.extend(
                 [
@@ -428,35 +466,11 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
                 ]
             )
 
-        
+            local_observations = torch.cat(local_observations)
+            layer_state = torch.cat([global_observations, local_observations])
+            states.append(layer_state)
 
-        optim_state = torch.cat(
-            [
-                remaining_budget,
-                torch.tensor([log_learning_rate]),
-                torch.tensor(lr_hist_deltas[1:]),  # first one always 0
-                
-                torch.tensor([norm_grad_layer.item()]),
-                torch.tensor([norm_vel_layer.item()]),
-                torch.tensor([norm_weights_layer.item()]),
-                torch.tensor([mean_weight.item()]),
-                torch.tensor([var_weight.item()]),
-                torch.tensor([first_layer_grad_norm.item()]),
-                torch.tensor([first_layer_vel_norm.item()]),
-                torch.tensor([first_layer_weights_norm.item()]),
-                torch.tensor([first_layer_weight_mean.item()]),
-                torch.tensor([first_layer_weight_var.item()]),
-                torch.tensor([last_layer_grad_norm.item()]),
-                torch.tensor([last_layer_vel_norm.item()]),
-                torch.tensor([last_layer_weights_norm.item()]),
-                torch.tensor([last_layer_weight_mean.item()]),
-                torch.tensor([last_layer_weight_var.item()]),
-            ]
-        )
-        if self.epoch_mode:
-            optim_state.append(self.average_loss)
-
-        return optim_state
+        return states
 
     def render(self, mode="human"):
         """Render progress."""
