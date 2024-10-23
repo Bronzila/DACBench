@@ -111,7 +111,6 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         # Use default state function, if no specific function is given
         self.get_states = config.get("state_method", self.get_default_states)
 
-        self.learning_rate = config.get("initial_learning_rate")
         self.initial_learning_rate = config.get("initial_learning_rate")
         self.state_version = config.get("state_version")
         self.initial_seed = config.get("seed")
