@@ -379,7 +379,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         is_train_loss_finite = int(np.isfinite(self.train_loss))
         loss_ratio = np.log(self.validation_loss / self.train_loss)
 
-        global_observations = torch.cat(
+        global_observations_tensor = torch.cat(
             [
                 remaining_budget,
                 torch.tensor([is_train_loss_finite]),
@@ -398,9 +398,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             # Layer encoding
             layer_type = self.layer_types[layer_idx]
             layer_enc = _get_layer_encoding(layer_type)
-            depth_enc = layer_idx / len(self.optimizer.param_groups)
             local_observations.append(torch.tensor([layer_enc]))
-            local_observations.append(torch.tensor([depth_enc]))
 
             log_learning_rate = (
                 np.log10(self.learning_rates[layer_idx])
@@ -410,6 +408,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             local_observations.append(torch.tensor([log_learning_rate]))
             lr_hist_deltas = log_learning_rate - self.lr_histories[layer_idx]
             local_observations.append(torch.tensor(lr_hist_deltas))
+
+            depth_enc = layer_idx / len(self.optimizer.param_groups)
+            local_observations.append(torch.tensor([depth_enc]))
 
             # Weight, gradient and momentum statistics
             weights_all = []
@@ -437,20 +438,20 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
                     velocities_all.append(torch.zeros_like(weights))
 
             # Concatenate all
-            weights_all = torch.cat(weights_all)
-            weights_mean = weights_all.mean().unsqueeze(0)
-            weights_var = weights_all.var().unsqueeze(0)
-            weights_norm = weights_all.norm(p=2).unsqueeze(0)
+            weights_tensor = torch.cat(weights_all)
+            weights_mean = weights_tensor.mean().unsqueeze(0)
+            weights_var = weights_tensor.var().unsqueeze(0)
+            weights_norm = weights_tensor.norm(p=2).unsqueeze(0)
 
-            grads_all = torch.cat(grads_all)
-            grads_mean = grads_all.mean().unsqueeze(0)
-            grads_var = grads_all.var().unsqueeze(0)
-            grads_norm = grads_all.norm(p=2).unsqueeze(0)
+            grads_tensor = torch.cat(grads_all)
+            grads_mean = grads_tensor.mean().unsqueeze(0)
+            grads_var = grads_tensor.var().unsqueeze(0)
+            grads_norm = grads_tensor.norm(p=2).unsqueeze(0)
 
-            velocities_all = torch.cat(velocities_all)
-            velocities_mean = velocities_all.mean().unsqueeze(0)
-            velocities_var = velocities_all.var().unsqueeze(0)
-            velocities_norm = velocities_all.norm(p=2).unsqueeze(0)
+            velocities_tensor = torch.cat(velocities_all)
+            velocities_mean = velocities_tensor.mean().unsqueeze(0)
+            velocities_var = velocities_tensor.var().unsqueeze(0)
+            velocities_norm = velocities_tensor.norm(p=2).unsqueeze(0)
 
             local_observations.extend(
                 [
@@ -466,8 +467,8 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
                 ]
             )
 
-            local_observations = torch.cat(local_observations)
-            layer_state = torch.cat([global_observations, local_observations])
+            local_observations_tensor = torch.cat(local_observations)
+            layer_state = torch.cat([local_observations_tensor, global_observations_tensor])
             states.append(layer_state)
 
         return states
