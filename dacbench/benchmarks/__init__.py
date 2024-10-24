@@ -8,6 +8,7 @@ from dacbench.benchmarks.luby_benchmark import LubyBenchmark
 from dacbench.benchmarks.sigmoid_benchmark import SigmoidBenchmark
 from dacbench.benchmarks.toysgd_benchmark import ToySGDBenchmark
 from dacbench.benchmarks.toysgd_2D_benchmark import ToySGD2DBenchmark
+from dacbench.benchmarks.layerwise_sgd_benchmark import LayerwiseSGDBenchmark
 
 __all__ = [
     "LubyBenchmark",
@@ -16,6 +17,7 @@ __all__ = [
     "ToySGD2DBenchmark",
     "GeometricBenchmark",
     "FastDownwardBenchmark",
+    "LayerwiseSGDBenchmark",
 ]
 
 modcma_spec = importlib.util.find_spec("modcma")
