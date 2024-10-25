@@ -227,7 +227,7 @@ class SGDEnv(AbstractMADACEnv):
         if crashed:
             self._done = True
             return (
-                self.get_state(self),
+                self.get_state(),
                 torch.tensor(self.crash_penalty),
                 False,
                 True,
@@ -275,9 +275,9 @@ class SGDEnv(AbstractMADACEnv):
             self.test_loss = test_losses.mean()
             self.test_accuracy = self.test_accuracies.mean()
 
-        reward = self.get_reward(self)
+        reward = self.get_reward()
 
-        return self.get_state(self), reward, False, truncated, info
+        return self.get_state(), reward, False, truncated, info
 
     def reset(self, seed=None, options=None):
         """Initialize the neural network, data loaders, etc. for given/random next task.
@@ -386,24 +386,18 @@ class SGDEnv(AbstractMADACEnv):
         if self.epoch_mode:
             self.average_loss = 0
 
-        return self.get_state(self), {}
+        return self.get_state(), {}
 
-    def get_default_reward(self, _) -> torch.tensor:
+    def get_default_reward(self) -> torch.tensor:
         """The default reward function.
-
-        Args:
-            _ (_type_): Empty parameter, which can be used when overriding
 
         Returns:
             float: The calculated reward
         """
         return torch.tensor(-self.validation_loss)
 
-    def get_default_state(self, _) -> torch.Tensor:
+    def get_default_state(self) -> torch.Tensor:
         """Default state function.
-
-        Args:
-            _ (_type_): Empty parameter, which can be used when overriding
 
         Returns:
             dict: The current state
