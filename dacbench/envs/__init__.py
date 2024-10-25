@@ -13,6 +13,7 @@ from dacbench.envs.sigmoid import (
 from dacbench.envs.theory import TheoryEnv
 from dacbench.envs.toysgd import ToySGDEnv
 from dacbench.envs.toysgd_2D import ToySGD2DEnv
+from dacbench.envs.layerwise_sgd import LayerwiseSGDEnv
 
 __all__ = [
     "LubyEnv",
@@ -25,6 +26,7 @@ __all__ = [
     "ToySGD2DEnv",
     "GeometricEnv",
     "TheoryEnv",
+    "LayerwiseSGDEnv"
 ]
 
 modcma_spec = importlib.util.find_spec("modcma")

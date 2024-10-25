@@ -13,18 +13,12 @@ from gymnasium import spaces
 from torch import nn
 
 from dacbench.abstract_benchmark import AbstractBenchmark, objdict
-from dacbench.envs import SGDEnv
+from dacbench.envs import LayerwiseSGDEnv
 from dacbench.envs.env_utils import sgd_utils
 
 DEFAULT_CFG_SPACE = CS.ConfigurationSpace()
 LR = CS.Float(name="learning_rate", bounds=(0.0, 0.05))
-# Value used for momentum like adaptation, as adam optimizer has no real momentum;
-# "beta1" is changed
-MOMENTUM = CS.Float(
-    name="momentum", bounds=(0.0, 1.0)
-)  # ! Only used, when "use_momentum" var in config true
 DEFAULT_CFG_SPACE.add_hyperparameter(LR)
-DEFAULT_CFG_SPACE.add_hyperparameter(MOMENTUM)
 
 
 def __default_loss_function(**kwargs):
@@ -33,7 +27,7 @@ def __default_loss_function(**kwargs):
 
 INFO = {
     "identifier": "LR",
-    "name": "Learning Rate Adaption for Neural Networks",
+    "name": "Layerwise Learning Rate Adaption for Neural Networks",
     "reward": "Negative Log Differential Validation Loss",
     "state_description": [
         "Step",
@@ -48,11 +42,11 @@ INFO = {
         # "Training Loss",
         # "Alignment",
     ],
-    "action_description": ["Learning Rate", "Momentum"],
+    "action_description": ["Learning Rate"],
 }
 
 
-SGD_DEFAULTS = objdict(
+LAYERWISE_SGD_DEFAULTS = objdict(
     {
         "config_space": DEFAULT_CFG_SPACE,
         "observation_space_class": "Dict",
@@ -98,7 +92,8 @@ SGD_DEFAULTS = objdict(
             # "weight_decay": 10.978902603194243,
             # "eps": 1.2346464628039852e-10,
             # "betas": (0.9994264825468422, 0.9866804882743139),
-            "momentum": 0.9
+            "momentum": 0.9,
+            "lr": 0.002,
         },
         "cutoff": 1e2,
         "loss_function": __default_loss_function,
@@ -110,7 +105,6 @@ SGD_DEFAULTS = objdict(
         # else specific set can be set: e.g. "MNIST"
         # "reward_function":,    # Can be set, to replace the default function
         # "state_method":,       # Can be set, to replace the default function
-        "use_momentum": False,
         "seed": 0,
         "crash_penalty": -10000.0,
         "initial_learning_rate": 0.002,
@@ -124,11 +118,11 @@ SGD_DEFAULTS = objdict(
 )
 
 
-class SGDBenchmark(AbstractBenchmark):
+class LayerwiseSGDBenchmark(AbstractBenchmark):
     """Benchmark with default configuration & relevant functions for SGD."""
 
     def __init__(self, config_path=None, config=None):
-        """Initialize SGD Benchmark.
+        """Initialize layerwise SGD Benchmark.
 
         Parameters
         -------
@@ -137,19 +131,19 @@ class SGDBenchmark(AbstractBenchmark):
         """
         super().__init__(config_path, config)
         if not self.config:
-            self.config = objdict(SGD_DEFAULTS.copy())
+            self.config = objdict(LAYERWISE_SGD_DEFAULTS.copy())
 
-        for key in SGD_DEFAULTS:
+        for key in LAYERWISE_SGD_DEFAULTS:
             if (key not in self.config or
                 key == "instance_mode" and self.config[key] == ""):
-                self.config[key] = SGD_DEFAULTS[key]
+                self.config[key] = LAYERWISE_SGD_DEFAULTS[key]
 
     def get_environment(self):
-        """Return SGDEnv env with current configuration.
+        """Return LayerwiseSGDEnv env with current configuration.
 
         Returns:
         -------
-        SGDEnv
+        LayerwiseSGDEnv
             SGD environment
         """
         if "instance_set" not in self.config:
@@ -159,7 +153,7 @@ class SGDBenchmark(AbstractBenchmark):
         if "test_set" not in self.config and "test_set_path" in self.config:
             self.read_instance_set(test=True)
 
-        env = SGDEnv(self.config)
+        env = LayerwiseSGDEnv(self.config)
         for func in self.wrap_funcs:
             env = func(env)
 
@@ -218,10 +212,10 @@ class SGDBenchmark(AbstractBenchmark):
 
         Returns:
         -------
-        env : SGDEnv
+        env : LayerwiseSGDEnv
             SGD environment
         """
         if instance_set_path is not None:
             self.config["instance_set_path"] = instance_set_path
         self.read_instance_set()
-        return SGDEnv(self.config)
+        return LayerwiseSGDEnv(self.config)
