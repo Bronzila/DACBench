@@ -125,7 +125,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
 
         self.predictions = deque(torch.zeros(2))
 
-    def step(self, action: list[float]):
+    def step(self, actions: list[float]):
         """Update the parameters of the neural network using the given learning rate lr,
         in the direction specified by AdamW, and if not done (crashed/cutoff reached),
         performs another forward/backward pass (update only in the next step).
@@ -133,7 +133,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         truncated = super().step_()
         info = {}
 
-        log_learning_rates = action
+        log_learning_rates = actions
         self.learning_rates = [10**log_learning_rate for log_learning_rate in log_learning_rates]
 
         # Update action history
@@ -277,7 +277,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             raise NotImplementedError(
                 f"No implementation for instance version: {self.instance_mode}"
             )
-        # self.lr_history = deque(torch.ones(5) * math.log10(self.initial_learning_rate))
+
         self.optimizer_type = torch.optim.SGD
         self.info = {}
         self._done = False
@@ -355,9 +355,6 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
     def get_default_reward(self) -> torch.tensor:
         """The default reward function.
 
-        Args:
-            _ (_type_): Empty parameter, which can be used when overriding
-
         Returns:
             float: The calculated reward
         """
@@ -365,9 +362,6 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
 
     def get_default_states(self) -> list[torch.Tensor]:
         """Default state function.
-
-        Args:
-            _ (_type_): Empty parameter, which can be used when overriding
 
         Returns:
             list[dict]: The current states of all layers
@@ -529,11 +523,11 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         return last_loss.mean().detach().cpu(), running_loss.cpu() / len(loader)
 
     def _update_lr_histories(self, log_learning_rates: list[float]) -> None:
-        for lr_history, log_lr in zip(self.lr_histories, log_learning_rates):
+        for lr_history, log_lr in zip(self.lr_histories, log_learning_rates, strict=True):
             lr_history.pop()
             lr_history.appendleft(log_lr)
 
     def seed(self, seed, seed_action_space=False):
-        super(LayerwiseSGDEnv, self).seed(seed, seed_action_space)
+        super().seed(seed, seed_action_space)
 
         self.rng = np.random.default_rng(seed)

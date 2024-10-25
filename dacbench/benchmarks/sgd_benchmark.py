@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import csv
-from pathlib import Path
 import re
+from pathlib import Path
 
 import ConfigSpace as CS  # noqa: N817
 import numpy as np
+import torch
 from gymnasium import spaces
 from torch import nn
-import torch
 
 from dacbench.abstract_benchmark import AbstractBenchmark, objdict
 from dacbench.envs import SGDEnv
@@ -140,9 +140,8 @@ class SGDBenchmark(AbstractBenchmark):
             self.config = objdict(SGD_DEFAULTS.copy())
 
         for key in SGD_DEFAULTS:
-            if key not in self.config:
-                self.config[key] = SGD_DEFAULTS[key]
-            elif key == "instance_mode" and self.config[key] == "":
+            if (key not in self.config or
+                key == "instance_mode" and self.config[key] == ""):
                 self.config[key] = SGD_DEFAULTS[key]
 
     def get_environment(self):
@@ -190,11 +189,11 @@ class SGDBenchmark(AbstractBenchmark):
 
                 architecture = []
                 for layer in row["architecture"].split("-"):
-                    match = re.match(r'(\w+)\((.*)\)', layer)
+                    match = re.match(r"(\w+)\((.*)\)", layer)
                     if match:
                         # Extract the literals and the values inside the brackets
                         layer_type = match.group(1)
-                        params = match.group(2).split(',')
+                        params = match.group(2).split(",")
                         # Convert the values to integers if necessary
                         layer_params = [int(p.strip()) for p in params]
                         architecture.append((layer_type, layer_params))
