@@ -403,7 +403,7 @@ class SGDEnv(AbstractMADACEnv):
             dict: The current state
         """
 
-        remaining_budget = torch.tensor([(self.n_steps - self.c_step) / self.n_steps])
+        remaining_budget = torch.tensor([(self.n_steps - self.c_step) / self.n_steps], device=self.device)
         log_learning_rate = (
             np.log10(self.learning_rate)
             if self.learning_rate != 0
@@ -451,30 +451,30 @@ class SGDEnv(AbstractMADACEnv):
         state = torch.cat(
             [
                 remaining_budget,
-                torch.tensor([log_learning_rate]),
-                torch.tensor(lr_hist_deltas[1:]),  # first one always 0
-                torch.tensor([is_train_loss_finite]),
-                torch.tensor([math.log10(self.initial_learning_rate)]),
-                torch.tensor([self.train_loss]),
-                torch.tensor([self.validation_loss]),
-                torch.tensor([loss_ratio]),
-                torch.tensor([self.train_accuracy.item()]),
-                torch.tensor([self.validation_accuracy]),
-                torch.tensor([norm_grad_layer.item()]),
-                torch.tensor([norm_vel_layer.item()]),
-                torch.tensor([norm_weights_layer.item()]),
-                torch.tensor([mean_weight.item()]),
-                torch.tensor([var_weight.item()]),
-                torch.tensor([first_layer_grad_norm.item()]),
-                torch.tensor([first_layer_vel_norm.item()]),
-                torch.tensor([first_layer_weights_norm.item()]),
-                torch.tensor([first_layer_weight_mean.item()]),
-                torch.tensor([first_layer_weight_var.item()]),
-                torch.tensor([last_layer_grad_norm.item()]),
-                torch.tensor([last_layer_vel_norm.item()]),
-                torch.tensor([last_layer_weights_norm.item()]),
-                torch.tensor([last_layer_weight_mean.item()]),
-                torch.tensor([last_layer_weight_var.item()]),
+                torch.tensor([log_learning_rate], device=self.device),
+                torch.tensor(lr_hist_deltas[1:], device=self.device),  # first one always 0
+                torch.tensor([is_train_loss_finite], device=self.device),
+                torch.tensor([math.log10(self.initial_learning_rate)], device=self.device),
+                torch.tensor([self.train_loss], device=self.device),
+                torch.tensor([self.validation_loss], device=self.device),
+                torch.tensor([loss_ratio], device=self.device),
+                torch.tensor([self.train_accuracy.item()], device=self.device),
+                torch.tensor([self.validation_accuracy], device=self.device),
+                torch.tensor([norm_grad_layer.item()], device=self.device),
+                torch.tensor([norm_vel_layer.item()], device=self.device),
+                torch.tensor([norm_weights_layer.item()], device=self.device),
+                torch.tensor([mean_weight.item()], device=self.device),
+                torch.tensor([var_weight.item()], device=self.device),
+                torch.tensor([first_layer_grad_norm.item()], device=self.device),
+                torch.tensor([first_layer_vel_norm.item()], device=self.device),
+                torch.tensor([first_layer_weights_norm.item()], device=self.device),
+                torch.tensor([first_layer_weight_mean.item()], device=self.device),
+                torch.tensor([first_layer_weight_var.item()], device=self.device),
+                torch.tensor([last_layer_grad_norm.item()], device=self.device),
+                torch.tensor([last_layer_vel_norm.item()], device=self.device),
+                torch.tensor([last_layer_weights_norm.item()], device=self.device),
+                torch.tensor([last_layer_weight_mean.item()], device=self.device),
+                torch.tensor([last_layer_weight_var.item()], device=self.device),
             ]
         )
         if self.epoch_mode:

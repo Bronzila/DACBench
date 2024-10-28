@@ -368,20 +368,20 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         """
         states = []
         # Global observations
-        remaining_budget = torch.tensor([(self.n_steps - self.c_step) / self.n_steps])
+        remaining_budget = torch.tensor([(self.n_steps - self.c_step) / self.n_steps], device=self.device)
         is_train_loss_finite = int(np.isfinite(self.train_loss))
         loss_ratio = np.log(self.validation_loss / self.train_loss)
 
         global_observations_tensor = torch.cat(
             [
                 remaining_budget,
-                torch.tensor([is_train_loss_finite]),
-                torch.tensor([math.log10(self.initial_learning_rate)]),
-                torch.tensor([self.train_loss]),
-                torch.tensor([self.validation_loss]),
-                torch.tensor([loss_ratio]),
-                torch.tensor([self.train_accuracy.item()]),
-                torch.tensor([self.validation_accuracy]),
+                torch.tensor([is_train_loss_finite], device=self.device),
+                torch.tensor([math.log10(self.initial_learning_rate)], device=self.device),
+                torch.tensor([self.train_loss], device=self.device),
+                torch.tensor([self.validation_loss], device=self.device),
+                torch.tensor([loss_ratio], device=self.device),
+                torch.tensor([self.train_accuracy.item()], device=self.device),
+                torch.tensor([self.validation_accuracy], device=self.device),
             ]
         )
 
@@ -391,19 +391,19 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             # Layer encoding
             layer_type = self.layer_types[layer_idx]
             layer_enc = _get_layer_encoding(layer_type)
-            local_observations.append(torch.tensor([layer_enc]))
+            local_observations.append(torch.tensor([layer_enc], device=self.device))
 
             log_learning_rate = (
                 np.log10(self.learning_rates[layer_idx])
                 if self.learning_rates[layer_idx] != 0
                 else np.log10(1e-10)
             )
-            local_observations.append(torch.tensor([log_learning_rate]))
+            local_observations.append(torch.tensor([log_learning_rate], device=self.device))
             lr_hist_deltas = log_learning_rate - self.lr_histories[layer_idx]
-            local_observations.append(torch.tensor(lr_hist_deltas))
+            local_observations.append(torch.tensor(lr_hist_deltas, device=self.device))
 
             depth_enc = layer_idx / len(self.optimizer.param_groups)
-            local_observations.append(torch.tensor([depth_enc]))
+            local_observations.append(torch.tensor([depth_enc], device=self.device))
 
             # Weight, gradient and momentum statistics
             weights_all = []
@@ -432,19 +432,19 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
 
             # Concatenate all
             weights_tensor = torch.cat(weights_all)
-            weights_mean = weights_tensor.mean().unsqueeze(0)
-            weights_var = weights_tensor.var().unsqueeze(0)
-            weights_norm = weights_tensor.norm(p=2).unsqueeze(0)
+            weights_mean = weights_tensor.mean().unsqueeze(0).to(self.device)
+            weights_var = weights_tensor.var().unsqueeze(0).to(self.device)
+            weights_norm = weights_tensor.norm(p=2).unsqueeze(0).to(self.device)
 
             grads_tensor = torch.cat(grads_all)
-            grads_mean = grads_tensor.mean().unsqueeze(0)
-            grads_var = grads_tensor.var().unsqueeze(0)
-            grads_norm = grads_tensor.norm(p=2).unsqueeze(0)
+            grads_mean = grads_tensor.mean().unsqueeze(0).to(self.device)
+            grads_var = grads_tensor.var().unsqueeze(0).to(self.device)
+            grads_norm = grads_tensor.norm(p=2).unsqueeze(0).to(self.device)
 
             velocities_tensor = torch.cat(velocities_all)
-            velocities_mean = velocities_tensor.mean().unsqueeze(0)
-            velocities_var = velocities_tensor.var().unsqueeze(0)
-            velocities_norm = velocities_tensor.norm(p=2).unsqueeze(0)
+            velocities_mean = velocities_tensor.mean().unsqueeze(0).to(self.device)
+            velocities_var = velocities_tensor.var().unsqueeze(0).to(self.device)
+            velocities_norm = velocities_tensor.norm(p=2).unsqueeze(0).to(self.device)
 
             local_observations.extend(
                 [
