@@ -419,7 +419,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
                 if param.grad is not None:
                     grads_all.append(param.grad.view(-1))
                 else:
-                    print("Warning: No gradient data found. This should only occur in the first step.")
+                    assert self.c_step < 2
                     grads_all.append(torch.zeros_like(weights))
 
                 # Velocities
@@ -427,7 +427,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
                 if "momentum_buffer" in state:
                     velocities_all.append(state["momentum_buffer"].view(-1))
                 else:
-                    print("Warning: No momentum data found. This should only occur for the first two steps.")
+                    assert self.c_step < 2
                     velocities_all.append(torch.zeros_like(weights))
 
             # Concatenate all
