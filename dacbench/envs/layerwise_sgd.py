@@ -162,6 +162,8 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             self.optimizer.zero_grad()
             self.train_loss, self.train_accuracy = self.forward_backward(*train_args)
 
+        self.hist_train_acc.appendleft(self.train_accuracy)
+
         crashed = (
             not np.isfinite(self.train_loss).any()
             or not torch.isfinite(
@@ -207,6 +209,8 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         ):
             self.min_validation_loss = self.validation_loss
 
+        self.hist_val_acc.appendleft(self.validation_accuracy)
+
         # Calculate test loss after every epoch + when done
         if self._done or self.c_step % len(self.train_loader) == 0:
             val_args = [
@@ -220,6 +224,8 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             test_losses, self.test_accuracies = test(*val_args)
             self.test_loss = test_losses.mean()
             self.test_accuracy = self.test_accuracies.mean()
+
+        self._update_result_histories()
 
         reward = self.get_reward()
 
@@ -305,6 +311,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         losses, train_accuracy = test(*train_args)
         self.train_loss = losses.mean()
         self.train_accuracy = train_accuracy.mean()
+        self.hist_train_acc = deque([train_accuracy, train_accuracy], 2)
 
         test_args = [
             self.model,
@@ -317,6 +324,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         test_losses, test_accuracies = test(*test_args)
         self.test_loss = test_losses.mean()
         self.test_accuracy = test_accuracies.mean()
+        self.hist_test_acc = deque([self.test_accuracy, self.test_accuracy], 2)
 
         val_args = [
             self.model,
@@ -336,6 +344,11 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         if self.epoch_mode:
             self.average_loss = 0
 
+        # History of recent results: [current, diff_to_last]
+        self.hist_train_acc = [self.train_accuracy, 0]
+        self.hist_test_acc = [self.test_accuracy, 0]
+        self.hist_val_acc = [self.validation_accuracy, 0]
+
         return self.get_states(), {}
 
     def _create_param_groups(self) -> tuple[list[Any], list[Any]]:
@@ -352,13 +365,30 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
                 layer_types.append(type(layer).__name__)
         return param_groups, layer_types
 
-    def get_default_reward(self) -> torch.tensor:
+    def get_default_reward(self) -> torch.Tensor:
         """The default reward function.
 
         Returns:
             float: The calculated reward
         """
         return torch.tensor(-self.validation_loss)
+
+    def get_sparce_reward(self) -> torch.Tensor:
+        """Sparce reward function based on validation accuracy.
+
+        Returns:
+            Tensor: Either 1 for an improvement or else 0.
+        """
+        return torch.tensor(1) if self.hist_val_acc[1] > 0 else torch.tensor(0)
+
+    def get_improvement_reward(self) -> torch.Tensor:
+        """Reward function using improvement of validation accuracy.
+
+        Returns:
+            Tensor: Improvement.
+        """
+        return torch.tensor(self.hist_val_acc[1])
+
 
     def get_default_states(self) -> list[torch.Tensor]:
         """Default state function.
@@ -526,6 +556,15 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         for lr_history, log_lr in zip(self.lr_histories, log_learning_rates, strict=True):
             lr_history.pop()
             lr_history.appendleft(log_lr)
+
+    def _update_result_histories(self) -> None:
+        self.hist_train_acc[1] = self.train_accuracy - self.hist_train_acc[0]
+        self.hist_val_acc[1] = self.val_accuracy - self.hist_val_acc[0]
+        self.hist_test_acc[1] = self.test_accuracy - self.hist_test_acc[0]
+
+        self.hist_train_acc[0] = self.train_accuracy
+        self.hist_val_acc[0] = self.val_accuracy
+        self.hist_test_acc[0] = self.test_accuracy
 
     def seed(self, seed, seed_action_space=False):
         super().seed(seed, seed_action_space)
