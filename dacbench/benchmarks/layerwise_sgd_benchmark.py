@@ -189,7 +189,10 @@ class LayerwiseSGDBenchmark(AbstractBenchmark):
                         layer_type = match.group(1)
                         params = match.group(2).split(",")
                         # Convert the values to integers if necessary
-                        layer_params = [int(p.strip()) for p in params]
+                        if layer_type == "Dropout":
+                            layer_params = [float(p.strip()) for p in params]
+                        else:
+                            layer_params = [int(p.strip()) for p in params]
                         architecture.append((layer_type, layer_params))
                     else:
                         architecture.append((layer, []))

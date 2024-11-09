@@ -1,0 +1,7 @@
+ID;dataset;architecture;seed;steps;
+0;MNIST;Conv2d(1, 32, 3, 1, 0)-ReLU-Conv2d(32, 64, 3, 1, 0)-ReLU-MaxPool2d(2, 2)-Dropout(0.25)-Flatten-Linear(9216, 128)-ReLU-Dropout(0.25)-Linear(128, 10)-LogSoftmax(1);85370663;9000;
+1;MNIST;Conv2d(1, 32, 3, 1, 0)-ReLU-Conv2d(32, 64, 3, 1, 0)-ReLU-MaxPool2d(2, 2)-Dropout(0.25)-Flatten-Linear(9216, 128)-ReLU-Dropout(0.25)-Linear(128, 10)-LogSoftmax(1);597236641;9000;
+2;MNIST;Conv2d(1, 32, 3, 1, 0)-ReLU-Conv2d(32, 64, 3, 1, 0)-ReLU-MaxPool2d(2, 2)-Dropout(0.25)-Flatten-Linear(9216, 128)-ReLU-Dropout(0.25)-Linear(128, 10)-LogSoftmax(1);455413943;9000;
+3;MNIST;Conv2d(1, 32, 3, 1, 0)-ReLU-Conv2d(32, 64, 3, 1, 0)-ReLU-MaxPool2d(2, 2)-Dropout(0.25)-Flatten-Linear(9216, 128)-ReLU-Dropout(0.25)-Linear(128, 10)-LogSoftmax(1);666364192;9000;
+4;MNIST;Conv2d(1, 32, 3, 1, 0)-ReLU-Conv2d(32, 64, 3, 1, 0)-ReLU-MaxPool2d(2, 2)-Dropout(0.25)-Flatten-Linear(9216, 128)-ReLU-Dropout(0.25)-Linear(128, 10)-LogSoftmax(1);738646438;9000;
+5;MNIST;Conv2d(1, 32, 3, 1, 0)-ReLU-Conv2d(32, 64, 3, 1, 0)-ReLU-MaxPool2d(2, 2)-Dropout(0.25)-Flatten-Linear(9216, 128)-ReLU-Dropout(0.25)-Linear(128, 10)-LogSoftmax(1);671251256;9000;
