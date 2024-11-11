@@ -169,6 +169,7 @@ class SGDEnv(AbstractMADACEnv):
         self.seed(self.initial_seed)
 
         self.instance_set_path = config.get("instance_set_path")
+        self.dataset_path = config.get("dataset_path")
         self.fraction_of_dataset = config.get("fraction_of_dataset")
         self.train_validation_ratio = config.get("train_validation_ratio")
         self.instance_mode = config.get("instance_mode")
@@ -302,7 +303,7 @@ class SGDEnv(AbstractMADACEnv):
         # Get loaders for instance
         self.datasets, loaders = random_torchvision_loader(
             run_seed,
-            self.instance_set_path,
+            self.dataset_path,
             self.dataset_name if self.instance_mode != "instance_set" else self.instance[0],
             self.batch_size,
             self.fraction_of_dataset,

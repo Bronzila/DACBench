@@ -110,6 +110,7 @@ LAYERWISE_SGD_DEFAULTS = objdict(
         "initial_learning_rate": 0.002,
         "multi_agent": False,
         "instance_set_path": "../instance_sets/sgd/sgd_train_100instances.csv",
+        "dataset_path": "./datasets",
         "benchmark_info": INFO,
         "dataset": "MNIST",  # MNIST, CIFAR10, FashionMNIST
         "epoch_mode": False,
