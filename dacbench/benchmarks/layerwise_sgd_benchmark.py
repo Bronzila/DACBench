@@ -110,6 +110,7 @@ LAYERWISE_SGD_DEFAULTS = objdict(
         "initial_learning_rate": 0.002,
         "multi_agent": False,
         "instance_set_path": "../instance_sets/sgd/sgd_train_100instances.csv",
+        "dataset_path": "./datasets",
         "benchmark_info": INFO,
         "dataset": "MNIST",  # MNIST, CIFAR10, FashionMNIST
         "epoch_mode": False,
@@ -189,7 +190,10 @@ class LayerwiseSGDBenchmark(AbstractBenchmark):
                         layer_type = match.group(1)
                         params = match.group(2).split(",")
                         # Convert the values to integers if necessary
-                        layer_params = [int(p.strip()) for p in params]
+                        if layer_type == "Dropout":
+                            layer_params = [float(p.strip()) for p in params]
+                        else:
+                            layer_params = [int(p.strip()) for p in params]
                         architecture.append((layer_type, layer_params))
                     else:
                         architecture.append((layer, []))
