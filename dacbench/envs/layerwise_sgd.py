@@ -106,7 +106,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         self.torchub_model = config.get("torch_hub_model", (False, None, False))
 
         # Use default reward function, if no specific function is given
-        self.get_reward = config.get("reward_function", self.get_default_reward)
+        self.get_reward = config.get("reward_function", self.get_sparce_reward)
 
         # Use default state function, if no specific function is given
         self.get_states = config.get("state_method", self.get_default_states)
@@ -345,9 +345,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             self.average_loss = 0
 
         # History of recent results: [current, diff_to_last]
-        self.hist_train_acc = [self.train_accuracy, 0]
-        self.hist_test_acc = [self.test_accuracy, 0]
-        self.hist_val_acc = [self.validation_accuracy, 0]
+        self.hist_train_acc = deque([self.train_accuracy, 0])
+        self.hist_test_acc = deque([self.test_accuracy, 0])
+        self.hist_val_acc = deque([self.validation_accuracy, 0])
 
         return self.get_states(), {}
 
@@ -559,11 +559,11 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
 
     def _update_result_histories(self) -> None:
         self.hist_train_acc[1] = self.train_accuracy - self.hist_train_acc[0]
-        self.hist_val_acc[1] = self.val_accuracy - self.hist_val_acc[0]
+        self.hist_val_acc[1] = self.validation_accuracy - self.hist_val_acc[0]
         self.hist_test_acc[1] = self.test_accuracy - self.hist_test_acc[0]
 
         self.hist_train_acc[0] = self.train_accuracy
-        self.hist_val_acc[0] = self.val_accuracy
+        self.hist_val_acc[0] = self.validation_accuracy
         self.hist_test_acc[0] = self.test_accuracy
 
     def seed(self, seed, seed_action_space=False):
