@@ -231,7 +231,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         Also perform a single forward/backward pass,
         not yet updating the neural network parameters.
         """
-        super().reset_(seed=seed)
+        super().reset_(seed=seed, scheme="round_robin")
         if options is None:
             options = {}
 
