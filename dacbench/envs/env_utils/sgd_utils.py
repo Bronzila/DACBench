@@ -232,6 +232,7 @@ class LayerType:
     FLATTEN = "FLATTEN"
     LINEAR = "LINEAR"
     LOGSOFTMAX = "LOGSOFTMAX"
+    BATCHNORM = "BATCHNORM"
 
 
 # Define a mapping from layer type to the corresponding PyTorch module
@@ -243,6 +244,7 @@ layer_mapping = {
     LayerType.DROPOUT: nn.Dropout,
     LayerType.RELU: nn.ReLU,
     LayerType.LOGSOFTMAX: nn.LogSoftmax,
+    LayerType.BATCHNORM: nn.BatchNorm2d,
 }
 
 
