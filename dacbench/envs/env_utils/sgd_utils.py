@@ -255,6 +255,17 @@ def create_model(layer_specification, n_classes) -> nn.Sequential:
     Returns:
         nn.Sequential: The pytorch model
     """
+    if len(layer_specification) == 1:
+        type, params = layer_specification[0]
+        if type == "nb201":
+            from xautodl.models import get_cell_based_tiny_net
+            import json
+            from utils import get_safe_original_cwd
+
+            with open(get_safe_original_cwd() / f"cifar_networks/{params['size']}/{params['id']}.txt", "r") as f:
+                arch_info = json.load(f)
+            return get_cell_based_tiny_net(arch_info["config"])
+
     layers = []
     for layer_type, layer_params in layer_specification:
         layer_class = layer_mapping[layer_type.upper()]
