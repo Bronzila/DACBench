@@ -163,8 +163,6 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             self.optimizer.zero_grad()
             self.train_loss, self.train_accuracy = self.forward_backward(*train_args)
 
-        self.hist_train_acc.appendleft(self.train_accuracy)
-
         crashed = (
             not np.isfinite(self.train_loss).any()
             or not torch.isfinite(
@@ -209,8 +207,6 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             or self.validation_loss <= self.min_validation_loss
         ):
             self.min_validation_loss = self.validation_loss
-
-        self.hist_val_acc.appendleft(self.validation_accuracy)
 
         # Calculate test loss after every epoch + when done
         if self._done or self.c_step % len(self.train_loader) == 0:
@@ -521,6 +517,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         """
         model.train()
         (data, target) = next(iter(loader))
+        print(data.size())
         data, target = data.to(device), target.to(device)
         output = model(data)
         loss = loss_function(output, target)
