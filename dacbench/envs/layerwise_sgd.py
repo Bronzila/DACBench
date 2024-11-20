@@ -532,7 +532,6 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         """
         model.train()
         (data, target) = next(iter(loader))
-        print(data.size())
         data, target = data.to(device), target.to(device)
         output = model(data)
         if isinstance(output, tuple):
