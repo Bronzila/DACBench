@@ -60,6 +60,8 @@ def test(
         for data, target in loader:
             d_data, d_target = data.to(device), target.to(device)
             output = model(d_data)
+            if isinstance(output, tuple):
+                _, output = output
             _, preds = output.max(dim=1)
             test_losses.append(loss_function(output, d_target))
             test_accuracies.append(torch.sum(preds == d_target) / len(d_target))
@@ -507,6 +509,8 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         (data, target) = next(iter(loader))
         data, target = data.to(device), target.to(device)
         output = model(data)
+        if isinstance(output, tuple):
+            _, output = output
         loss = loss_function(output, target)
         loss.mean().backward()
 

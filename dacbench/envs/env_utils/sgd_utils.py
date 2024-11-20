@@ -147,9 +147,7 @@ def sample_optimizer_params(rng: np.random.Generator, **kwargs):
         if modify > 0.8 and rng.random() > 0.5
         else 0.1
     )
-    return {
-        "momentum": momentum
-    }
+    return {"momentum": momentum}
 
 
 def random_architecture(
@@ -253,6 +251,23 @@ def create_model(layer_specification, n_classes) -> nn.Sequential:
     Returns:
         nn.Sequential: The pytorch model
     """
+    if len(layer_specification) == 1:
+        layer_type, params = layer_specification[0]
+        if layer_type == "nb201":
+            import json
+
+            from src.utils import get_safe_original_cwd
+            from xautodl.models import get_cell_based_tiny_net
+
+            config_path = (
+                get_safe_original_cwd()
+                / "DACBench/dacbench/instance_sets/sgd"
+                / f"cifar_networks/{params['size']}/{params['id']}.txt"
+            )
+            with open(config_path) as f:
+                arch_info = json.load(f)
+            return get_cell_based_tiny_net(arch_info["config"])
+
     layers = []
     for layer_type, layer_params in layer_specification:
         layer_class = layer_mapping[layer_type.upper()]
