@@ -20,18 +20,19 @@ def set_global_seeds(seed: int) -> None:
     np.random.seed(seed)
     random.seed(seed)
 
-def _optimizer_actions(
-    optimizer: torch.optim.Optimizer, actions: list[float]
-) -> None:
+
+def _optimizer_actions(optimizer: torch.optim.Optimizer, actions: list[float]) -> None:
     for g, lr in zip(optimizer.param_groups, actions, strict=True):
         g["lr"] = lr
 
+
 def _get_layer_encoding(layer_type: str) -> int:
-        if layer_type == "Linear":
-            return 0
-        if layer_type == "Conv2d":
-            return 1
-        raise ValueError("Unkown layer type.")
+    if layer_type == "Linear":
+        return 0
+    if layer_type == "Conv2d":
+        return 1
+    raise ValueError("Unkown layer type.")
+
 
 def test(
     model,
@@ -91,7 +92,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
     def __init__(self, config):
         """Init env."""
         super().__init__(config)
-        torch.use_deterministic_algorithms(True) # For reproducibility
+        torch.use_deterministic_algorithms(True)  # For reproducibility
         self.epoch_mode = config.get("epoch_mode", True)
         self.device = config.get("device")
 
@@ -135,14 +136,14 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         info = {}
 
         log_learning_rates = actions
-        self.learning_rates = [10**log_learning_rate for log_learning_rate in log_learning_rates]
+        self.learning_rates = [
+            10**log_learning_rate for log_learning_rate in log_learning_rates
+        ]
 
         # Update action history
         self._update_lr_histories(log_learning_rates)
 
-        _optimizer_actions(
-            self.optimizer, self.learning_rates
-        )
+        _optimizer_actions(self.optimizer, self.learning_rates)
 
         if self.epoch_mode:
             self.train_loss, self.average_loss = self.run_epoch(
@@ -250,7 +251,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         self.datasets, loaders = random_torchvision_loader(
             run_seed,
             self.dataset_path,
-            self.dataset_name if self.instance_mode != "instance_set" else self.instance[0],
+            self.dataset_name
+            if self.instance_mode != "instance_set"
+            else self.instance[0],
             self.batch_size,
             self.fraction_of_dataset,
             self.train_validation_ratio,
@@ -288,12 +291,15 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         # create param groups then feed them into optimizer
         param_groups, self.layer_types = self._create_param_groups()
         self.optimizer: torch.optim.Optimizer = self.optimizer_type(
-            param_groups, **self.optimizer_params,
+            param_groups,
+            **self.optimizer_params,
         )
 
         self.n_layers = len(self.optimizer.param_groups)
         self.learning_rates = [self.initial_learning_rate] * self.n_layers
-        self.lr_histories = [deque(torch.ones(5) * math.log10(self.initial_learning_rate))] * self.n_layers
+        self.lr_histories = [
+            deque(torch.ones(5) * math.log10(self.initial_learning_rate))
+        ] * self.n_layers
         # Evaluate model initially
         train_args = [
             self.model,
@@ -369,7 +375,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         """
         states = []
         # Global observations
-        remaining_budget = torch.tensor([(self.n_steps - self.c_step) / self.n_steps], device=self.device)
+        remaining_budget = torch.tensor(
+            [(self.n_steps - self.c_step) / self.n_steps], device=self.device
+        )
         is_train_loss_finite = int(np.isfinite(self.train_loss))
         loss_ratio = np.log(self.validation_loss / self.train_loss)
 
@@ -377,7 +385,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             [
                 remaining_budget,
                 torch.tensor([is_train_loss_finite], device=self.device),
-                torch.tensor([math.log10(self.initial_learning_rate)], device=self.device),
+                torch.tensor(
+                    [math.log10(self.initial_learning_rate)], device=self.device
+                ),
                 torch.tensor([self.train_loss], device=self.device),
                 torch.tensor([self.validation_loss], device=self.device),
                 torch.tensor([loss_ratio], device=self.device),
@@ -399,7 +409,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
                 if self.learning_rates[layer_idx] != 0
                 else np.log10(1e-10)
             )
-            local_observations.append(torch.tensor([log_learning_rate], device=self.device))
+            local_observations.append(
+                torch.tensor([log_learning_rate], device=self.device)
+            )
             lr_hist_deltas = log_learning_rate - self.lr_histories[layer_idx]
             local_observations.append(torch.tensor(lr_hist_deltas, device=self.device))
 
@@ -462,7 +474,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             )
 
             local_observations_tensor = torch.cat(local_observations)
-            layer_state = torch.cat([local_observations_tensor, global_observations_tensor])
+            layer_state = torch.cat(
+                [local_observations_tensor, global_observations_tensor]
+            )
             states.append(layer_state)
 
         return states
@@ -524,7 +538,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         return last_loss.mean().detach().cpu(), running_loss.cpu() / len(loader)
 
     def _update_lr_histories(self, log_learning_rates: list[float]) -> None:
-        for lr_history, log_lr in zip(self.lr_histories, log_learning_rates, strict=True):
+        for lr_history, log_lr in zip(
+            self.lr_histories, log_learning_rates, strict=True
+        ):
             lr_history.pop()
             lr_history.appendleft(log_lr)
 
