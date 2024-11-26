@@ -9,10 +9,14 @@ from typing import Any
 
 import numpy as np
 import torch
+from torch import nn
+from xautodl.models.cell_infers import TinyNetwork
 
 from dacbench import AbstractMADACEnv
 from dacbench.envs.env_utils import sgd_utils
 from dacbench.envs.env_utils.sgd_utils import random_torchvision_loader
+
+ParameterizedLayerType = nn.Linear | nn.Conv2d
 
 
 def set_global_seeds(seed: int) -> None:
@@ -60,8 +64,9 @@ def test(
         for data, target in loader:
             d_data, d_target = data.to(device), target.to(device)
             output = model(d_data)
-            if isinstance(output, tuple):
+            if isinstance(model, TinyNetwork):
                 _, output = output
+                output = nn.functional.log_softmax(output, dim=1)
             _, preds = output.max(dim=1)
             test_losses.append(loss_function(output, d_target))
             test_accuracies.append(torch.sum(preds == d_target) / len(d_target))
@@ -350,15 +355,35 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
     def _create_param_groups(self) -> tuple[list[Any], list[Any]]:
         param_groups = []
         layer_types = []
-        for layer in self.model.children():
-            if isinstance(layer, torch.nn.Linear | torch.nn.Conv2d):
-                param_groups.append(
-                    {
-                        "params": layer.parameters(),
-                        "lr": self.initial_learning_rate,
-                    }
-                )
-                layer_types.append(type(layer).__name__)
+        # If TinyNetwork, we have to check more deeper
+        if isinstance(self.model, TinyNetwork):
+
+            def find_modules(module: nn.Module, param_groups, layer_types):
+                # if leaf
+                if list(module.children()) == [] and isinstance(
+                    module, ParameterizedLayerType
+                ):
+                    self._add_to_param_groups(module, param_groups, layer_types)
+                for layer in module.children():
+                    find_modules(layer, param_groups, layer_types)
+
+            find_modules(self.model, param_groups, layer_types)
+        else:
+            for layer in self.model.children():
+                if isinstance(layer, ParameterizedLayerType):
+                    self._add_to_param_groups(layer, param_groups, layer_types)
+        return param_groups, layer_types
+
+    def _add_to_param_groups(
+        self, layer: nn.Module, param_groups: list[dict], layer_types: list[str]
+    ) -> list[dict] | list[str]:
+        param_groups.append(
+            {
+                "params": layer.parameters(),
+                "lr": self.initial_learning_rate,
+            }
+        )
+        layer_types.append(type(layer).__name__)
         return param_groups, layer_types
 
     def get_default_reward(self) -> torch.tensor:
@@ -509,8 +534,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         (data, target) = next(iter(loader))
         data, target = data.to(device), target.to(device)
         output = model(data)
-        if isinstance(output, tuple):
+        if isinstance(model, TinyNetwork):
             _, output = output
+            output = nn.functional.log_softmax(output, dim=1)
         loss = loss_function(output, target)
         loss.mean().backward()
 
