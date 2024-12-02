@@ -103,8 +103,8 @@ SGD_DEFAULTS = objdict(
         "cutoff": 1e2,
         "loss_function": __default_loss_function,
         "loss_function_kwargs": {},
-        "training_batch_size": 64,
-        "fraction_of_dataset": 0.6,
+        "training_batch_size": 256,
+        "fraction_of_dataset": 1.0,
         "train_validation_ratio": 0.8,  # If set to None, random value is used
         "dataset_name": "MNIST",  # If set to None, random data set is chosen;
         # else specific set can be set: e.g. "MNIST"
@@ -141,8 +141,11 @@ class SGDBenchmark(AbstractBenchmark):
             self.config = objdict(SGD_DEFAULTS.copy())
 
         for key in SGD_DEFAULTS:
-            if (key not in self.config or
-                key == "instance_mode" and self.config[key] == ""):
+            if (
+                key not in self.config
+                or key == "instance_mode"
+                and self.config[key] == ""
+            ):
                 self.config[key] = SGD_DEFAULTS[key]
 
     def get_environment(self):
