@@ -1,4 +1,5 @@
 """Utils for the environments."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -6,6 +7,8 @@ import torch
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
 from torchvision import datasets, transforms
+
+from .nanoGPT import OpenWebTextDataset
 
 datasets.CIFAR10.download  # noqa: B018
 
@@ -34,6 +37,11 @@ DATASETS = {
         ),
         "icgen_name": "fashion_mnist",
     },
+    "OpenWebText": {
+        "transform": transforms.Compose(
+            transforms.ToTensor(),
+        )
+    },
 }
 
 
@@ -58,8 +66,12 @@ def random_torchvision_loader(
             1 - int(np.exp(rng.uniform(low=np.log(5), high=np.log(20)))) / 100
         )
 
+    DatasetClass = (
+        OpenWebTextDataset if name == "OpenWebText" else getattr(datasets, name)
+    )
+
     transform = DATASETS[name]["transform"]
-    train_dataset = getattr(datasets, name)(
+    train_dataset = DatasetClass(
         dataset_path, train=True, download=True, transform=transform
     )
     train_size = int(len(train_dataset) * fraction_of_dataset)
@@ -68,7 +80,7 @@ def random_torchvision_loader(
         train_dataset, [train_size, len(train_dataset) - train_size]
     )
     train_dataset.classes = classes
-    test = getattr(datasets, name)(dataset_path, train=False, transform=transform)
+    test = DatasetClass(dataset_path, train=False, transform=transform)
     train_size = int(len(train_dataset) * train_validation_ratio)
     train_size = train_size - train_size % batch_size
     train, val = torch.utils.data.random_split(
