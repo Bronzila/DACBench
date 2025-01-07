@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.data.dataloader import DataLoader
+from torch.utils.data.dataloader import DataLoader, Dataset
 from torchvision import datasets, transforms
 
 from .nanoGPT import OpenWebTextDataset
@@ -53,7 +53,7 @@ def random_torchvision_loader(
     fraction_of_dataset: float,
     train_validation_ratio: float | None,
     **kwargs,
-) -> tuple[DataLoader, DataLoader, DataLoader]:
+) -> tuple[tuple[Dataset, Dataset], tuple[DataLoader, DataLoader, DataLoader]]:
     """Create train, validation, test loaders for `name` dataset."""
     rng = np.random.default_rng(seed)
 
