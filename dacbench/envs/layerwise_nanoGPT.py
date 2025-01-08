@@ -6,6 +6,7 @@ import math
 import os
 import pickle
 import random
+import time
 from collections import deque
 from contextlib import nullcontext
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Any
 import numpy as np
 import torch
 from DACBench.dacbench.envs.env_utils.sgd_utils import random_torchvision_loader
+from torch.distributed import destroy_process_group, init_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP  # noqa: N817
 
 from dacbench import AbstractMADACEnv
@@ -99,7 +101,61 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         super().__init__(config)
         torch.use_deterministic_algorithms(True)  # For reproducibility
         self.epoch_mode = config.get("epoch_mode", True)
-        self.ddp_local_rank = os.environ["LOCAL_RANK"]
+
+        # nanoGPT
+        # model
+        self.n_layer = config.get("n_layer")
+        self.n_head = config.get("n_head")
+        self.n_embd = config.get("n_embd")
+        self.block_size = config.get("block_size")
+        self.bias = config.get("bias")
+        self.dropout = config.get("dropout")
+
+        meta_path = Path(self.dataset_path, "meta.pkl")
+        self.meta_vocab_size = None
+        if meta_path.exists():
+            with open(meta_path, "rb") as f:
+                meta = pickle.load(f)
+            self.meta_vocab_size = meta["vocab_size"]
+
+        # training
+        self.max_train_iters = config.get("max_train_iters", 600000)
+        # data
+        self.gradient_accumulation_steps = config.get("grad_acc_steps", 5 * 8)
+        self.batch_size = config.get("batch_size", 12)
+        self.block_size = config.get("block_size", 1024)
+        # DDP
+        backend = config.get("backend", "nccl")  # 'nccl', 'gloo', etc.
+        self.ddp = int(os.environ.get("RANK", -1)) != -1
+        if self.ddp:
+            init_process_group(backend=backend)
+            self.ddp_rank = int(os.environ["RANK"])
+            self.ddp_local_rank = int(os.environ["LOCAL_RANK"])
+            self.ddp_world_size = int(os.environ["WORLD_SIZE"])
+            self.device = f"cuda:{self.ddp_local_rank}"
+            torch.cuda.set_device(self.device)
+            self.master_process = (
+                self.ddp_rank == 0
+            )  # this process will do logging, checkpointing etc.
+            self.seed_offset = self.ddp_rank  # each process gets a different seed
+            # world_size number of processes will be training simultaneously, so we can scale
+            # down the desired gradient accumulation iterations per process proportionally
+            assert self.gradient_accumulation_steps % self.ddp_world_size == 0
+            self.gradient_accumulation_steps //= self.ddp_world_size
+        else:
+            # if not ddp, we are running on a single gpu, and one process
+            self.master_process = True
+            self.seed_offset = 0
+            self.ddp_world_size = 1
+
+        self.tokens_per_iter = (
+            self.gradient_accumulation_steps
+            * self.ddp_world_size
+            * self.batch_size
+            * self.block_size
+        )
+        print(f"tokens per iteration will be: {self.tokens_per_iter:,}")
+
         self.device = config.get("device")
         self.pdtype = (
             torch.bfloat16
@@ -111,7 +167,8 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             if self.device == "cpu"
             else torch.amp.autocast(device_type=self.device, dtype=self.pdtype)
         )
-        self.gradient_accumulation_steps = 5 * 8
+        self.grad_clip = 1.0  # clip gradients at this value, or disable if == 0.0
+        self.log_interval = 1  # clip gradients at this value, or disable if == 0.0
 
         self.optimizer_type = torch.optim.SGD
         self.optimizer_params = config.get("optimizer_params")
@@ -141,21 +198,6 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         self.instance_mode = config.get("instance_mode")
         self.instance_set = config.get("instance_set")
         self.inst_id = 0
-
-        # nanoGPT specific
-        self.n_layer = config.get("n_layer")
-        self.n_head = config.get("n_head")
-        self.n_embd = config.get("n_embd")
-        self.block_size = config.get("block_size")
-        self.bias = config.get("bias")
-        self.dropout = config.get("dropout")
-
-        meta_path = Path(self.dataset_path, "meta.pkl")
-        self.meta_vocab_size = None
-        if meta_path.exists():
-            with open(meta_path, "rb") as f:
-                meta = pickle.load(f)
-            self.meta_vocab_size = meta["vocab_size"]
 
         self.predictions = deque(torch.zeros(2))
 
@@ -265,6 +307,8 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         not yet updating the neural network parameters.
         """
         super().reset_(seed=seed, scheme="round_robin")
+        if self.ddp:
+            destroy_process_group()
         if options is None:
             options = {}
 
@@ -311,13 +355,13 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         # crop down the model block size if desired, using model surgery
         if self.block_size < self.model.config.block_size:
             self.model.crop_block_size(self.block_size)
-            model_args["block_size"] = (
-                self.block_size
-            )  # so that the checkpoint will have the right value
+            model_args[
+                "block_size"
+            ] = self.block_size  # so that the checkpoint will have the right value
         self.model.to(self.device)
 
         # initialize a GradScaler. If enabled=False scaler is a no-op
-        scaler = torch.cuda.amp.GradScaler(
+        self.scaler = torch.cuda.amp.GradScaler(
             enabled=isinstance(self.pdtype, torch.float16)
         )
 
@@ -348,16 +392,19 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             deque(torch.ones(5) * math.log10(self.initial_learning_rate))
         ] * self.n_layers
 
-        X, Y = self.get_batch("train")  # fetch the very first batch
-        raw_model = (
+        self.local_iter_num = 0
+        self.raw_model = (
             self.model.module if self.ddp else self.model
         )  # unwrap DDP container if needed
-        running_mfu = -1.0
+        self.running_mfu = -1.0
 
         losses = self.estimate_loss()
         self.train_loss = losses["train"]
         self.val_loss = losses["val"]
         self.test_loss = losses["test"]
+
+        self.X, self.Y = self.get_batch("train")  # fetch the very first batch
+        self.t0 = time.time()
 
         if self.epoch_mode:
             self.average_loss = 0
@@ -549,6 +596,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         ):
             losses = torch.zeros(self.eval_iters)
             for k in range(self.eval_iters):
+                # Retrieving the data like this only for DL with shuffle=True
                 X, Y = next(iter(loader))
                 with self.ctx:
                     logits, loss = self.model(X, Y)
@@ -559,7 +607,6 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
 
     def run_epoch(self):
         """Run a single epoch of training for given `model` with `loss_function`."""
-
         # forward backward update, with optional gradient accumulation to simulate larger batch size
         # and using the GradScaler if data type is float16
         for micro_step in range(self.gradient_accumulation_steps):
@@ -568,60 +615,50 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
                 # the official way to do this is with model.no_sync() context manager, but
                 # I really dislike that this bloats the code and forces us to repeat code
                 # looking at the source of that context manager, it just toggles this variable
-                self.model.require_backward_grad_sync = (micro_step == self.gradient_accumulation_steps - 1)
+                self.model.require_backward_grad_sync = (
+                    micro_step == self.gradient_accumulation_steps - 1
+                )
             with self.ctx:
-                logits, loss = self.model(X, Y)
-                loss = loss / self.gradient_accumulation_steps # scale the loss to account for gradient accumulation
+                logits, loss = self.model(self.X, self.Y)
+                loss = (
+                    loss / self.gradient_accumulation_steps
+                )  # scale the loss to account for gradient accumulation
             # immediately async prefetch next batch while model is doing the forward pass on the GPU
-            X, Y = self.train_loader.
+            self.X, self.Y = next(iter(self.train_loader))
             # backward pass, with gradient scaling if training in fp16
-            scaler.scale(loss).backward()
+            self.scaler.scale(loss).backward()
         # clip the gradient
-        if grad_clip != 0.0:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        if self.grad_clip != 0.0:
+            self.scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
         # step the optimizer and scaler if training in fp16
-        scaler.step(optimizer)
-        scaler.update()
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
         # flush the gradients as soon as we can, no need for this memory anymore
-        optimizer.zero_grad(set_to_none=True)
+        self.optimizer.zero_grad(set_to_none=True)
 
         # timing and logging
         t1 = time.time()
-        dt = t1 - t0
-        t0 = t1
-        if iter_num % log_interval == 0 and master_process:
+        dt = t1 - self.t0
+        self.t0 = t1
+        if self.c_step % self.log_interval == 0 and self.master_process:
             # get loss as float. note: this is a CPU-GPU sync point
             # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
-            lossf = loss.item() * gradient_accumulation_steps
-            if local_iter_num >= 5: # let the training loop settle a bit
-                mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
-                running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
-            print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
-        iter_num += 1
-        local_iter_num += 1
-
-        # termination conditions
-        if iter_num > max_iters:
-            break
-        
-        last_loss = None
-        running_loss = 0
-        predictions = []
-        model.train()
-        for data, target in loader:
-            data, target = data.to(device), target.to(device)
-            optimizer.zero_grad()
-            output = model(data)
-            loss = loss_function(output, target)
-            loss.mean().backward()
-            optimizer.step()
-            predictions.append(output)
-            last_loss = loss
-            running_loss += last_loss.mean().item()
-        self.predictions.pop()
-        self.predictions.appendleft(predictions.mean())
-        return last_loss.mean().detach().cpu(), running_loss.cpu() / len(loader)
+            lossf = loss.item() * self.gradient_accumulation_steps
+            if self.local_iter_num >= 5:  # let the training loop settle a bit
+                mfu = self.raw_model.estimate_mfu(
+                    self.batch_size * self.gradient_accumulation_steps, dt
+                )
+                self.running_mfu = (
+                    mfu
+                    if self.running_mfu == -1.0
+                    else 0.9 * self.running_mfu + 0.1 * mfu
+                )
+            print(
+                f"iter {self.c_step}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {self.running_mfu*100:.2f}%"
+            )
+        self.local_iter_num += 1
+        return loss.item()
 
     def _update_lr_histories(self, log_learning_rates: list[float]) -> None:
         for lr_history, log_lr in zip(
