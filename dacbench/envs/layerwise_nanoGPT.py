@@ -564,7 +564,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         else:
             raise NotImplementedError
 
-    def forward_backward(self, model, loss_function, loader, device="cpu"):
+    def forward_backward(self, model, loss_function, loader, device="cuda"):
         """Do a forward and a backward pass for given `model` for `loss_function`.
 
         Returns:
@@ -576,10 +576,6 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         output = model(data)
         loss = loss_function(output, target)
         loss.mean().backward()
-
-        # for comparing current and last predictions
-        self.predictions.pop()
-        self.predictions.appendleft(output)
 
         accuracy = torch.sum(output.argmax(dim=1) == target) / len(target)
         return loss.mean().detach().cpu().numpy(), torch.tensor(accuracy).cpu().numpy()
