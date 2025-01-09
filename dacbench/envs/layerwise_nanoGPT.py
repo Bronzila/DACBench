@@ -14,6 +14,9 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.utils
+import torch.utils.data
+import torch.utils.data.dataloader
 from DACBench.dacbench.envs.env_utils.sgd_utils import random_torchvision_loader
 from torch.distributed import destroy_process_group, init_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP  # noqa: N817
@@ -39,44 +42,6 @@ def _get_layer_encoding(layer_type: str) -> int:
     if layer_type == "Conv2d":
         return 1
     raise ValueError("Unkown layer type.")
-
-
-def test(
-    model,
-    loss_function,
-    loader,
-    batch_size,
-    batch_percentage: float = 1.0,
-    device="cpu",
-):
-    """Evaluate given `model` on `loss_function`.
-
-    Percentage defines how much percentage of the data shall be used.
-    If nothing given the whole data is used.
-
-    Returns:
-        test_losses: Batch validation loss per data point
-    """
-    nmb_sets = batch_percentage * (len(loader.dataset) / batch_size)
-    model.eval()
-    test_losses = []
-    test_accuracies = []
-    i = 0
-
-    with torch.no_grad():
-        for data, target in loader:
-            d_data, d_target = data.to(device), target.to(device)
-            output = model(d_data)
-            _, preds = output.max(dim=1)
-            test_losses.append(loss_function(output, d_target))
-            test_accuracies.append(torch.sum(preds == d_target) / len(d_target))
-            i += 1
-            if i >= nmb_sets:
-                break
-    return (
-        torch.cat(test_losses).cpu().numpy(),
-        torch.tensor(test_accuracies).cpu().numpy(),
-    )
 
 
 class LayerwiseSGDEnv(AbstractMADACEnv):
@@ -119,7 +84,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             self.meta_vocab_size = meta["vocab_size"]
 
         # training
-        self.max_train_iters = config.get("max_train_iters", 600000)
+        # train_iters between adapting the lr
+        self.iters_per_epoch = config.get("iters_per_epoch", 10)
+        self.eval_interval = config.get("eval_interval", 400)
         # data
         self.gradient_accumulation_steps = config.get("grad_acc_steps", 5 * 8)
         self.batch_size = config.get("batch_size", 12)
@@ -220,16 +187,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         _optimizer_actions(self.optimizer, self.learning_rates)
 
         if self.epoch_mode:
-            self.train_loss, self.average_loss = self.run_epoch(
-                self.model,
-                self.loss_function,
-                self.train_loader,
-                self.optimizer,
-                self.device,
-            )
+            self.train_loss, self.average_loss = self.run_epoch()
         else:
             train_args = [
-                self.model,
                 self.loss_function,
                 self.train_loader,
                 self.device,
@@ -258,25 +218,15 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
 
         self._done = truncated
 
-        if (
-            self.c_step % len(self.train_loader) == 0 or self._done
-        ):  # Calculate validation loss at the end of an epoch
-            batch_percentage = 1.0
-        else:
-            batch_percentage = 0.1
-
-        val_args = [
-            self.model,
-            self.loss_function,
-            self.validation_loader,
-            self.batch_size,
-            batch_percentage,
-            self.device,
-        ]
-        validation_loss, validation_accuracy = test(*val_args)
-
+        batch_percentage = (
+            1.0 if self.c_step % self.eval_interval == 0 or self._done else 0.1
+        )
+        validation_loss, validation_accuracy = self.evaluate_performance(
+            self.validation_loader, batch_percentage
+        )
         self.validation_loss = validation_loss.mean()
         self.validation_accuracy = validation_accuracy.mean()
+
         if (
             self.min_validation_loss is None
             or self.validation_loss <= self.min_validation_loss
@@ -284,18 +234,12 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             self.min_validation_loss = self.validation_loss
 
         # Calculate test loss after every epoch + when done
-        if self._done or self.c_step % len(self.train_loader) == 0:
-            val_args = [
-                self.model,
-                self.loss_function,
-                self.test_loader,
-                self.batch_size,
-                1.0,
-                self.device,
-            ]
-            test_losses, self.test_accuracies = test(*val_args)
+        if self._done or self.c_step % self.eval_interval == 0:
+            test_losses, test_accuracies = self.evaluate_performance(
+                self.test_loader, 1.0
+            )
             self.test_loss = test_losses.mean()
-            self.test_accuracy = self.test_accuracies.mean()
+            self.test_accuracy = test_accuracies.mean()
 
         reward = self.get_reward()
 
@@ -564,42 +508,66 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         else:
             raise NotImplementedError
 
-    def forward_backward(self, model, loss_function, loader, device="cuda"):
+    def forward_backward(
+        self, loader: torch.utils.data.DataLoader
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Do a forward and a backward pass for given `model` for `loss_function`.
 
         Returns:
             loss: Mini batch training loss per data point
         """
-        model.train()
+        self.model.train()
         (data, target) = next(iter(loader))
-        data, target = data.to(device), target.to(device)
-        output = model(data)
-        loss = loss_function(output, target)
-        loss.mean().backward()
+        data, target = data.to(self.device), target.to(self.device)
+        logits, loss = self.model(data)
 
-        accuracy = torch.sum(output.argmax(dim=1) == target) / len(target)
+        # backward pass, with gradient scaling if training in fp16
+        self.scaler.scale(loss).backward()
+        # clip the gradient
+        if self.grad_clip != 0.0:
+            self.scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
+        # step the optimizer and scaler if training in fp16
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
+
+        accuracy = torch.sum(logits.argmax(dim=1) == target) / len(target)
         return loss.mean().detach().cpu().numpy(), torch.tensor(accuracy).cpu().numpy()
 
     @torch.no_grad()
-    def estimate_loss(self):
-        """Estimate an arbitrarily accurate loss over either split using many batches."""
-        out = {}
+    def evaluate_performance(
+        self,
+        loader: torch.utils.data.DataLoader,
+        batch_percentage: float = 1.0,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate current performance on a given data loader.
+
+        Percentage defines how much percentage of the data shall be used.
+        If nothing given the whole data is used.
+
+        Returns:
+            losses: Batch validation loss per data point
+        """
+        nmb_sets = batch_percentage * (len(loader.dataset) / self.batch_size)
         self.model.eval()
-        for loader, name in zip(
-            [self.train_loader, self.validation_loader, self.test_loader],
-            ["train", "val", "test"],
-            strict=False,
-        ):
-            losses = torch.zeros(self.eval_iters)
-            for k in range(self.eval_iters):
-                # Retrieving the data like this only for DL with shuffle=True
-                X, Y = next(iter(loader))
-                with self.ctx:
-                    logits, loss = self.model(X, Y)
-                losses[k] = loss.item()
-            out[name] = losses.mean()
-        self.model.train()
-        return out
+        test_losses = []
+        test_accuracies = []
+        i = 0
+
+        with torch.no_grad():
+            for _ in range(self.eval_iters):
+                data, target = next(iter(loader))
+                d_data, d_target = data.to(self.device), target.to(self.device)
+                logits, loss = self.model(d_data)
+                test_losses.append(loss.item())
+                test_accuracies.append(torch.sum(logits == d_target) / len(d_target))
+                i += 1
+                if i >= nmb_sets:
+                    break
+        return (
+            torch.cat(test_losses).cpu().numpy(),
+            torch.tensor(test_accuracies).cpu().numpy(),
+        )
 
     def run_epoch(self):
         """Run a single epoch of training for given `model` with `loss_function`."""
@@ -619,6 +587,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
                 loss = (
                     loss / self.gradient_accumulation_steps
                 )  # scale the loss to account for gradient accumulation
+                accuracy = torch.sum(logits.argmax(dim=1) == self.Y) / len(self.Y)
             # immediately async prefetch next batch while model is doing the forward pass on the GPU
             self.X, self.Y = next(iter(self.train_loader))
             # backward pass, with gradient scaling if training in fp16
@@ -654,7 +623,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
                 f"iter {self.c_step}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {self.running_mfu*100:.2f}%"
             )
         self.local_iter_num += 1
-        return loss.item()
+        return loss.item(), accuracy.item()
 
     def _update_lr_histories(self, log_learning_rates: list[float]) -> None:
         for lr_history, log_lr in zip(
