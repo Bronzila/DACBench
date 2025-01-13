@@ -20,8 +20,19 @@ num_proc_load_dataset = num_proc
 enc = tiktoken.get_encoding("gpt2")
 
 if __name__ == "__main__":
+    assert (Path() / "README.md").exists(), "Start the script from the project root."
+    dataset_directory = Path("./datasets/openwebtext")
     # takes 54GB in huggingface .cache dir, about 8M documents (8,013,769)
-    dataset = load_dataset("openwebtext", num_proc=num_proc_load_dataset)
+    dataset = load_dataset(
+        "openwebtext",
+        num_proc=num_proc_load_dataset,
+        trust_remote_code=True,
+        # I faced the issue that on the cluster by default all files were saved
+        # on the home directory and therefore ran into DISKQUOTA exceeded error.
+        # I tried some stuff here, but couldn't get it running.
+        # TODO Experiment if this works, else dig deeper into load_dataset()!
+        cache_dir=Path("./datasets/.cache/huggingface"),
+    )
 
     # Test Set: 0,27 GB
     # Train/Val Set: 53,73 GB
@@ -54,7 +65,7 @@ if __name__ == "__main__":
     # concatenate all the ids in each dataset into one large file we can use for training
     for split, dset in tokenized.items():
         arr_len = np.sum(dset["len"], dtype=np.uint64)
-        filename = Path.parent(__file__) / f"{split}.bin"
+        filename = dataset_directory / f"{split}.bin"
         dtype = np.uint16  # (can do since enc.max_token_value == 50256 is < 2**16)
         arr = np.memmap(filename, dtype=dtype, mode="w+", shape=(arr_len,))
         total_batches = 1024
