@@ -44,11 +44,11 @@ def _get_layer_encoding(layer_type: str) -> int:
     raise ValueError("Unkown layer type.")
 
 
-class LayerwiseSGDEnv(AbstractMADACEnv):
-    """The SGD DAC Environment implements the problem of dynamically configuring
-    the learning rate hyperparameter of a neural network optimizer
-    (more specifically, torch.optim.AdamW) for a supervised learning task.
-    While training, the model is evaluated after every epoch.
+class LayerwiseNanoGPTEnv(AbstractMADACEnv):
+    """The nanoGPT DAC Environment implements the problem of dynamically configuring the
+    learning rate hyperparameter of an optimizer (more specifically, torch.optim.SGD)
+    for training the nanoGPT model.
+    During training, the model is evaluated after every epoch.
 
     Actions correspond to learning rate values in [0,+inf[
     For observation space check `observation_space` method docstring.
@@ -66,6 +66,8 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         super().__init__(config)
         torch.use_deterministic_algorithms(True)  # For reproducibility
         self.epoch_mode = config.get("epoch_mode", True)
+        self.instance_set_path = config.get("instance_set_path")
+        self.dataset_path = config.get("dataset_path")
 
         # nanoGPT
         # model
@@ -85,14 +87,12 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
 
         # training
         # train_iters between adapting the lr
-        self.iters_per_epoch = config.get("iters_per_epoch", 10)
-        self.eval_interval = config.get("eval_interval", 400)
+        self.iters_per_epoch = config.get("iters_per_epoch")
+        self.eval_interval = config.get("eval_interval")
         # data
-        self.gradient_accumulation_steps = config.get("grad_acc_steps", 5 * 8)
-        self.batch_size = config.get("batch_size", 12)
-        self.block_size = config.get("block_size", 1024)
+        self.gradient_accumulation_steps = config.get("grad_acc_steps")
         # DDP
-        backend = config.get("backend", "nccl")  # 'nccl', 'gloo', etc.
+        backend = config.get("backend")
         self.ddp = int(os.environ.get("RANK", -1)) != -1
         if self.ddp:
             init_process_group(backend=backend)
@@ -140,12 +140,7 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         self.optimizer_type = torch.optim.SGD
         self.optimizer_params = config.get("optimizer_params")
         self.batch_size = config.get("training_batch_size")
-        self.model = config.get("model")
         self.crash_penalty = config.get("crash_penalty")
-        self.loss_function = config["loss_function"](**config["loss_function_kwargs"])
-        self.dataset_name = config.get("dataset_name")
-        self.use_generator = config.get("model_from_dataset")
-        self.torchub_model = config.get("torch_hub_model", (False, None, False))
 
         # Use default reward function, if no specific function is given
         self.get_reward = config.get("reward_function", self.get_default_reward)
@@ -154,12 +149,9 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         self.get_states = config.get("state_method", self.get_default_states)
 
         self.initial_learning_rate = config.get("initial_learning_rate")
-        self.state_version = config.get("state_version")
         self.initial_seed = config.get("seed")
         self.seed(self.initial_seed)
 
-        self.instance_set_path = config.get("instance_set_path")
-        self.dataset_path = config.get("dataset_path")
         self.fraction_of_dataset = config.get("fraction_of_dataset")
         self.train_validation_ratio = config.get("train_validation_ratio")
         self.instance_mode = config.get("instance_mode")
@@ -190,7 +182,6 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
             self.train_loss, self.average_loss = self.run_epoch()
         else:
             train_args = [
-                self.loss_function,
                 self.train_loader,
                 self.device,
             ]
@@ -636,20 +627,3 @@ class LayerwiseSGDEnv(AbstractMADACEnv):
         super().seed(seed, seed_action_space)
 
         self.rng = np.random.default_rng(seed)
-
-
-### Do we need to implement this scheduler or use our predefined ones?
-
-# learning rate decay scheduler (cosine with warmup)
-# def get_lr(it):
-#     # 1) linear warmup for warmup_iters steps
-#     if it < warmup_iters:
-#         return learning_rate * it / warmup_iters
-#     # 2) if it > lr_decay_iters, return min learning rate
-#     if it > lr_decay_iters:
-#         return min_lr
-#     # 3) in between, use cosine decay down to min learning rate
-#     decay_ratio = (it - warmup_iters) / (lr_decay_iters - warmup_iters)
-#     assert 0 <= decay_ratio <= 1
-#     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
-#     return min_lr + coeff * (learning_rate - min_lr)

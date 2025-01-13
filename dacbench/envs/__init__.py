@@ -4,6 +4,8 @@ import warnings
 
 from dacbench.envs.fast_downward import FastDownwardEnv
 from dacbench.envs.geometric import GeometricEnv
+from dacbench.envs.layerwise_nanoGPT import LayerwiseNanoGPTEnv
+from dacbench.envs.layerwise_sgd import LayerwiseSGDEnv
 from dacbench.envs.luby import LubyEnv, luby_gen
 from dacbench.envs.sigmoid import (
     ContinuousSigmoidEnv,
@@ -13,7 +15,6 @@ from dacbench.envs.sigmoid import (
 from dacbench.envs.theory import TheoryEnv
 from dacbench.envs.toysgd import ToySGDEnv
 from dacbench.envs.toysgd_2D import ToySGD2DEnv
-from dacbench.envs.layerwise_sgd import LayerwiseSGDEnv
 
 __all__ = [
     "LubyEnv",
@@ -26,7 +27,8 @@ __all__ = [
     "ToySGD2DEnv",
     "GeometricEnv",
     "TheoryEnv",
-    "LayerwiseSGDEnv"
+    "LayerwiseSGDEnv",
+    "LayerwiseNanoGPTEnv",
 ]
 
 modcma_spec = importlib.util.find_spec("modcma")
